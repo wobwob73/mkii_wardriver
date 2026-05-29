@@ -1,0 +1,75 @@
+# `leaf_wifi5` — 5 GHz WiFi Branch Leaf Firmware
+
+Single binary for the 2–3 ESP32-C5 Leaves on the 5 GHz WiFi Branch. Identity adopted from the first `$CF` on the BC link. Implements `wifi5_branch_v1_0.md` §3–§8 (the Leaf-side half of the spec).
+
+## Target
+
+- **Board:** `esp32-c5-devkitc-1` (or Seeed XIAO ESP32-C5 once mainlined in PlatformIO's espressif32 platform).
+- **Framework:** Arduino on `espressif32@^6.9.0`, which carries arduino-esp32 v3.x with ESP32-C5 support. If your installed espressif32 version doesn't carry C5 support yet, switch `framework` to `espidf` in `platformio.ini` — the firmware tree is structured to recompile against the IDF directly with only `Serial`/`uart_*` adapter changes.
+- **Wire:** 230 400 8N1 to the RP2040 Branch Controller's PIO UART. `ARDUINO_USB_CDC_ON_BOOT=0` so `Serial` is hardware UART0.
+
+## Roles
+
+| Leaf | Mode | Channel set | Notes |
+|---|---|---|---|
+| `W5_1` | scan | `csid=3` (UNII-1 + UNII-2A) | hops 36, 40, 44, 48, 52, 56, 60, 64 |
+| `W5_2` | scan | `csid=6` (UNII-2C + UNII-3) | hops 100–144, 149–165 |
+| `W5_3` | WIDS | `csid=7` (all 25 channels) | promiscuous, 100 ms dwell |
+
+Scan dwell is **passive ~200 ms/channel** (no probe requests), matching the listen-only design philosophy from `wifi24_leaf_protocol_v1_2_amendment.md` §6.4. Per-cycle sweep times: W5_1 ≈ 1.6 s, W5_2 ≈ 3.4 s, W5_3 ≈ 2.5 s.
+
+## Build / flash
+
+```
+pio run -e leaf_wifi5
+pio run -e leaf_wifi5 -t upload
+pio device monitor -b 230400      # observe traffic via a USB-serial probe;
+                                  # Serial is the BC link, not USB-CDC
+```
+
+## File layout
+
+```
+leaf_wifi5/
+├── platformio.ini
+├── README.md
+├── include/leaf_defs.h        constants, enums, ChannelSetId, 5 GHz channel table
+└── src/
+    ├── main.cpp
+    ├── uart_proto.{h,cpp}     framing, checksum, hex encoding (lifted from leaf_wifi24)
+    ├── config.{h,cpp}         identity + ChannelSetId + 32-bit channel mask
+    ├── heartbeat.{h,cpp}      $HB emission + heap watchdog
+    ├── cmd_handler.{h,cpp}    $CF (channel-set ID + dwell), $CH (lo/hi mask), $PG, $RB
+    ├── wifi_scan.{h,cpp}      async passive scan, hopping across the assigned channel set
+    ├── wids_monitor.{h,cpp}   promiscuous + ring + channel hop across $CH mask
+    ├── frame_parser.{h,cpp}   802.11 mgmt header + beacon IE walker (band-agnostic)
+    └── bssid_tracker.{h,cpp}  FNV-1a per-cycle BSSID seen set
+```
+
+## `$CF` payload shape
+
+```
+$CF,leaf_id,mode,channel_set_id,dwell_ms,reserved*XX
+```
+
+| Field | Description |
+|---|---|
+| `leaf_id` | `W5_1`, `W5_2`, or `W5_3` |
+| `mode` | `0` = scan, `1` = WIDS |
+| `channel_set_id` | `1`–`7` per `wifi5_branch_v1_0.md` §5.1 |
+| `dwell_ms` | per-channel dwell time; `0` → default (200 scan / 100 WIDS) |
+| `reserved` | send `0` |
+
+## `$CH` payload shape (WIDS only)
+
+```
+$CH,leaf_id,bitmask_lo,bitmask_hi*XX
+```
+
+`mask = (bitmask_hi << 16) | bitmask_lo` covers the canonical 25-channel ordering documented in `leaf_defs.h::CHANNELS_5G[]`. The Leaf ignores `$CH` when in scan mode and acknowledges with `$HB` unchanged.
+
+## Notes
+
+- `esp_wifi_set_band(WIFI_BAND_5G)` is invoked once at boot in both `wifi_scan::init()` and `wids_monitor::start()`. If a future espressif32 release exposes a different macro name the build will warn rather than fail because the call is guarded behind `#ifdef WIFI_BAND_5G`.
+- The encryption-mapping helper covers OWE and 192-bit WPA3-Enterprise where the SDK exposes them, falling back to the RSN AKM walker (vendored from `leaf_wifi24`) when the SDK constant isn't present.
+- HE/EHT (WiFi 6 / 6E / 7) IE decoding is **out of scope for v1.0** — beacons are still detected; only the per-AP `enc` field is surfaced. A future v1.1 amendment may add a `phy_mode` field.
