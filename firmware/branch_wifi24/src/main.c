@@ -14,8 +14,9 @@
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 #include "hardware/gpio.h"
+#include "hardware/clocks.h"
 
-static void pps_irq_callback(uint gpio, uint32_t events) {
+static void pps_irq_callback(unsigned int gpio, uint32_t events) {
     pps_time_isr(gpio, events);
 }
 

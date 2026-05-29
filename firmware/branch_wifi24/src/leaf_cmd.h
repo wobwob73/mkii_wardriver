@@ -12,4 +12,4 @@ void leaf_cmd_send_rb(uint8_t leaf_idx);
 
 void leaf_cmd_relay(uint8_t leaf_idx, const char *inner_line);
 
-uint tx_pin_for(uint8_t leaf_idx);
+unsigned int tx_pin_for(uint8_t leaf_idx);

@@ -18,7 +18,7 @@ void pps_time_init(void) {
     gpio_pull_down(PPS_GPIO);
 }
 
-void pps_time_isr(uint gpio, uint32_t events) {
+void pps_time_isr(unsigned int gpio, uint32_t events) {
     (void)events;
     if (gpio != PPS_GPIO) return;
     g_state.pps_timer_us = time_us_64();

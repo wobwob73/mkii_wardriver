@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 
-uint tx_pin_for(uint8_t leaf_idx) {
+unsigned int tx_pin_for(uint8_t leaf_idx) {
     switch (leaf_idx) {
         case LEAF_W1: return LEAF_W1_TX_PIN;
         case LEAF_W2: return LEAF_W2_TX_PIN;

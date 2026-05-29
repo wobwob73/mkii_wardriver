@@ -14,7 +14,7 @@ typedef struct {
 
 void pps_time_init(void);
 
-void pps_time_isr(uint gpio, uint32_t events);
+void pps_time_isr(unsigned int gpio, uint32_t events);
 
 void pps_time_apply_tm(uint32_t epoch_s, bool fix_ok);
 
