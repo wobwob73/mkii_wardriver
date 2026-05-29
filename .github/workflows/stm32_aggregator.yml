@@ -1,0 +1,44 @@
+name: stm32_aggregator
+
+on:
+  push:
+    branches: [main, claude/**]
+    paths:
+      - 'firmware/stm32_aggregator/**'
+      - '.github/workflows/stm32_aggregator.yml'
+  pull_request:
+    paths:
+      - 'firmware/stm32_aggregator/**'
+      - '.github/workflows/stm32_aggregator.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: stm32_aggregator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        unit: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake ninja-build build-essential
+      - name: Configure App/ + stub PAL (unit ${{ matrix.unit }})
+        run: |
+          cd firmware/stm32_aggregator
+          mkdir -p build${{ matrix.unit }}
+          cd build${{ matrix.unit }}
+          cmake -G Ninja -DMKII_STM32_UNIT=${{ matrix.unit }} ..
+      - name: Build static library
+        run: |
+          cd firmware/stm32_aggregator/build${{ matrix.unit }}
+          ninja
+      - name: Upload static library
+        uses: actions/upload-artifact@v4
+        with:
+          name: stm32_aggregator-unit${{ matrix.unit }}-app-lib
+          path: firmware/stm32_aggregator/build${{ matrix.unit }}/libmkii_stm32_app.a
+          if-no-files-found: warn
