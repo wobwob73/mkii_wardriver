@@ -196,17 +196,17 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef *htim) {
 /* ----- USB OTG_FS MSP ----- */
 
 void HAL_PCD_MspInit(PCD_HandleTypeDef *hpcd) {
-    if (hpcd->Instance == USB1_OTG_FS) {
+    if (hpcd->Instance == USB_OTG_FS) {
         __HAL_RCC_GPIOA_CLK_ENABLE();
         GPIO_InitTypeDef g = {0};
         g.Mode = GPIO_MODE_AF_PP;
         g.Pull = GPIO_NOPULL;
         g.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-        g.Alternate = GPIO_AF10_OTG1_FS;
+        g.Alternate = GPIO_AF10_OTG2_FS;
         g.Pin = USB_DM_Pin | USB_DP_Pin;
         HAL_GPIO_Init(USB_DM_Port, &g);
 
-        __HAL_RCC_USB1_OTG_FS_CLK_ENABLE();
+        __HAL_RCC_USB2_OTG_FS_CLK_ENABLE();
         HAL_PWREx_EnableUSBVoltageDetector();
         HAL_NVIC_SetPriority(OTG_FS_IRQn, 9, 0);
         HAL_NVIC_EnableIRQ(OTG_FS_IRQn);
@@ -214,8 +214,8 @@ void HAL_PCD_MspInit(PCD_HandleTypeDef *hpcd) {
 }
 
 void HAL_PCD_MspDeInit(PCD_HandleTypeDef *hpcd) {
-    if (hpcd->Instance == USB1_OTG_FS) {
-        __HAL_RCC_USB1_OTG_FS_CLK_DISABLE();
+    if (hpcd->Instance == USB_OTG_FS) {
+        __HAL_RCC_USB2_OTG_FS_CLK_DISABLE();
         HAL_NVIC_DisableIRQ(OTG_FS_IRQn);
     }
 }

@@ -19,7 +19,7 @@ I2C_HandleTypeDef  hi2c1;
 SD_HandleTypeDef   hsd1;
 TIM_HandleTypeDef  htim2;
 IWDG_HandleTypeDef hiwdg1;
-PCD_HandleTypeDef  hpcd_USB_OTG_FS;
+/* hpcd_USB_OTG_FS is owned by Platform/USB/Src/usbd_conf.c. */
 
 DMA_HandleTypeDef hdma_usart1_rx;
 DMA_HandleTypeDef hdma_usart2_rx;

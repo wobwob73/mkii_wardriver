@@ -46,7 +46,15 @@
 #define DATA_CACHE_ENABLE            1U
 #define INSTRUCTION_CACHE_ENABLE     1U
 
-#define USE_FULL_ASSERT              0U
+/* The HAL needs an assert_param macro at every call site. Provide a
+ * no-op (release-build) version; flip USE_FULL_ASSERT_RUNTIME if you
+ * want runtime parameter checks. */
+#ifdef USE_FULL_ASSERT_RUNTIME
+#define assert_param(expr) ((expr) ? (void)0U : assert_failed((uint8_t *)__FILE__, __LINE__))
+void assert_failed(uint8_t *file, uint32_t line);
+#else
+#define assert_param(expr) ((void)0U)
+#endif
 
 #include "stm32h7xx_hal_rcc.h"
 #include "stm32h7xx_hal_gpio.h"
