@@ -41,7 +41,7 @@ void init() {
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
     WiFi.disconnect(true);
-#ifdef WIFI_BAND_5G
+#ifdef LEAF_BAND_5G
     esp_wifi_set_band(WIFI_BAND_5G);
 #endif
     delay(50);

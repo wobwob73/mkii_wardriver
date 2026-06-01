@@ -361,6 +361,8 @@ Replace the `stm32_units` block:
 }
 ```
 
+> **Correction (2026-06-01):** the `"device": "FK743M2-IIT6"` entries above are **superseded** — that board was abandoned (onboard SDRAM pin conflicts blocked the required UARTs + SD). Both `stm32_units` now use the **NUCLEO-H753ZI (STM32H753ZIT6)**. Left unedited to preserve history; authoritative hardware is in `stm32_h753_firmware_v1_0.md` (§Target Hardware) and `HANDOFF.md` §9 item 1. The `gps`, `timing`, and `branches` fields are unaffected.
+
 ---
 
 ## §7 Report Additions — Add Environment Section

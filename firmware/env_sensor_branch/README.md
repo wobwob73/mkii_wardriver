@@ -22,7 +22,7 @@ RP2040 firmware for the Env Sensor Branch (single-board, no Leaves). Implements 
 
 - **Madgwick AHRS** at 100 Hz, decimated to 10 Hz, in `src/core0_fusion.c`.
 - The vendored public-domain Madgwick implementation lives in `third_party/MadgwickAHRS.{c,h}`.
-- The Sensirion Gas Index Algorithm is **stubbed** in `src/sgp41.c` — it returns the algorithm baseline (`voc_index = 100`, `nox_index = 1`) when SGP41 is conditioned, and `-1` otherwise. To upgrade to the real algorithm:
+- The Sensirion Gas Index Algorithm is **stubbed** in `src/sgp41.c` — it returns the algorithm baseline (`voc_index = 100`, `nox_index = 1`) when SGP41 is conditioned, and `-1` otherwise. **In v1.0.x the `$EN` `voc_index`/`nox_index` fields are therefore baseline-only constants, not live indices** — the SGP41 raw signals are read and CRC-checked, but the normalization that turns them into a moving 1–500 index is not yet wired in. Tracked as a **v1.1** item (`env_sensor_branch_v1_0.md` §14 item 9). To upgrade to the real algorithm:
   1. `git clone https://github.com/Sensirion/gas-index-algorithm third_party/sensirion_gas_index_algorithm`
   2. Add `third_party/sensirion_gas_index_algorithm/sensirion_gas_index_algorithm.c` to `CMakeLists.txt`.
   3. Replace `sgp41_run_gas_index()` body in `src/sgp41.c` with the Sensirion `GasIndexAlgorithm_process()` calls.

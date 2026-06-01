@@ -409,6 +409,8 @@ Added to v1 session metadata JSON:
 }
 ```
 
+> **Correction (2026-06-01):** `"device": "FK743M2-IIT6"` above is **superseded**. The FK743M2-IIT6 (STM32H743IIT6) board was abandoned — its onboard SDRAM pin conflicts blocked the UARTs and SD interface MKII needs. Both `stm32_units` now use the **NUCLEO-H753ZI (STM32H753ZIT6)**. This JSON is left unedited to preserve history; the authoritative hardware is defined in `stm32_h753_firmware_v1_0.md` (§Target Hardware) and `HANDOFF.md` §9 item 1. The `gps`, `branches`, and topology fields are unaffected.
+
 ---
 
 ## 7. Report Additions (v2)
@@ -434,7 +436,7 @@ New report sections available:
 | | Powered USB hub (10-port) | $25 |
 | | NVMe SSD 256GB | $30 |
 | | IMU + Baro + power regulation | $25 |
-| **STM32 ×2** | FK743M2-IIT6 boards | $50 |
+| **STM32 ×2** | FK743M2-IIT6 boards ⟶ NUCLEO-H753ZI (see 2026-06-01 correction in §6) | $50 |
 | | M10Q-5883 + M10 basic GPS | $40 |
 | | SD cards ×2 | $15 |
 | **Branch Controllers** | RP2040 ×8 | $32 |

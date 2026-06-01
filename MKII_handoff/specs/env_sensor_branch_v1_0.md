@@ -552,6 +552,7 @@ For each sensor in order (IMU → mag → baro → SCD41 → SGP41):
 | 6 | Optional GPS on the Sensor Branch for INS dead-reckoning during tunnel/garage dropouts | Deferred to Phase 3+ |
 | 7 | Vibration analysis (accelerometer FFT for road/mount quality) | Trunk-side analysis; sensor data is sufficient |
 | 8 | Power budget (RP2040 + 5 sensors): not yet measured | Bench measurement pending |
+| 9 | Sensirion Gas Index Algorithm integration | **v1.0.x ships a baseline-only stub** (`sgp41_run_gas_index()` returns `voc=100`/`nox=1` once conditioned, `-1` otherwise); SGP41 raw signals are read but not normalized. `$EN` `voc_index`/`nox_index` are constants until the BSD-licensed algorithm is vendored. Targeted for **v1.1**. |
 
 ---
 

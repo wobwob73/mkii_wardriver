@@ -464,7 +464,7 @@ Sustained USB CDC bandwidth target: ~30 KB/s peak (2 × the per-unit estimate in
 target_compile_definitions(stm32_aggregator PRIVATE
     USE_HAL_DRIVER
     STM32H753xx
-    MKII_FW_VERSION="1.0.0"
+    MKII_FW_VERSION="1.0.1"                # firmware build; bumped for the 480 MHz clock-tree fix
     MKII_STM32_UNIT=${MKII_STM32_UNIT}     # 1 or 2, passed at configure time
 )
 ```
@@ -520,7 +520,7 @@ GitHub Actions runs `cmake -DMKII_STM32_UNIT=1 ..` then `make`, repeated for uni
 | # | Item | Status |
 |---|---|---|
 | 1 | Final PCB pin assignments (`stm32_config.h` is preliminary) | Preliminary |
-| 2 | UBX-CFG sequence: exact byte lists for the M10Q-5883 vs M10 basic variants | Datasheet cross-check pending |
+| 2 | UBX-CFG sequence: exact byte lists for the M10Q-5883 vs M10 basic variants | **v1.0.x ships `gps_push_config()` as a no-op**; the module must be pre-configured via u-center (NMEA RMC+GGA @1 Hz on I2C; PPS 1 Hz / 100 ms / rising-edge UTC). Sending `CFG-VALSET` at boot is targeted for **v1.1**. See firmware `README.md` §GPS pre-configuration. |
 | 3 | SDMMC1 + breakout: confirm pin compatibility on ST Morpho header for the chosen SD breakout | Hardware bring-up |
 | 4 | Power: 5V/3.3V draw with 5 Branches attached and USB host attached | Not yet analyzed |
 | 5 | Firmware update path: USB DFU vs ST-LINK reflash policy | TBD; ST-LINK for v1.0 |

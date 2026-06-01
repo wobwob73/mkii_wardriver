@@ -58,6 +58,8 @@ Total I2C bus load at 400 kHz: ~40 transactions/second from the IMU/mag/baro tie
 - After conditioning the firmware enters `sgp41_measure_raw_signals` mode, passing relative humidity and temperature compensation values pulled from the most recent SCD41 reading. If the SCD41 has not yet produced a fresh reading (first 5 s after boot or after an SCD41 failure), the firmware passes the SGP41 datasheet defaults (50 %RH, 25 °C).
 - The Sensirion Gas Index Algorithm needs a learning window (typically minutes for usable output, hours for full convergence). The algorithm state is held across power cycles only if persisted to flash — for v2.2 we do **not** persist; the index starts from defaults on every boot, which is acceptable for in-drive use because relative excursions over a single session are the useful signal, not absolute values.
 
+> **Firmware status (2026-06-01):** the `env_sensor_branch` v1.0.x firmware ships the Gas Index Algorithm as a **baseline-only stub** — `voc_index`/`nox_index` are emitted as the constant baseline (100 / 1) once the SGP41 is conditioned, and `-1` before that or on sensor failure. The raw SGP41 signals are read and CRC-checked, but the normalization to a live 1–500 index is deferred to firmware **v1.1** (`env_sensor_branch_v1_0.md` §14 item 9). Until then, treat `voc_index`/`nox_index` as presence/conditioning indicators, not graded readings.
+
 ---
 
 ## §3.8 `$EN` — Replace Message Definition

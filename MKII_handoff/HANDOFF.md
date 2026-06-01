@@ -1,18 +1,19 @@
 # MKII — Multi-Spectrum RF Survey Platform — Handoff Package
 
-**Compiled:** 2026-05-28
+**Compiled:** 2026-06-01
 **Purpose:** Single-document handoff covering project goals, system architecture,
 current state, completed work, outstanding work, repository layout, and a precise
-inventory of produced code (including what lives outside this package and how to
-retrieve it). Intended to bring a code-side contributor up to speed with no prior
-context.
+inventory of produced code. Intended to bring a code-side contributor up to speed with
+no prior context.
 
-> **Read this first.** Two firmware codebases have already been written and
-> compile/flash successfully, but their source archives are **not in this package** —
-> they were generated in prior working sessions and saved to ephemeral output
-> directories. See [§7 Code Inventory](#7-code-inventory--what-exists-and-where) for
-> exactly what exists and how to pull it. This document and the `specs/` folder are
-> the authoritative design reference regardless.
+> **Read this first.** Six firmware trees are written and committed under `firmware/`,
+> each with its own GitHub Actions build workflow: `leaf_wifi24`, `branch_wifi24`,
+> `leaf_wifi5`, `branch_wifi5`, `env_sensor_branch`, and `stm32_aggregator`. Nothing is
+> "missing / retrieve from chat" anymore. `leaf_wifi24` and `branch_wifi24` are
+> re-derivations from spec (the original source was lost with a prior sandbox). See
+> [§7 Code Inventory](#7-code-inventory--what-exists-and-where) and the companion
+> `CODE_STATUS.md` for per-tree status, versions, build commands, and deviations. This
+> document and `specs/` remain the authoritative design reference.
 
 ---
 
@@ -150,7 +151,7 @@ retransmit — corrupted lines dropped, heartbeats expose error rates.
 flood), `$BS` (branch status).
 **STM32 → BC:** `$TM` (time epoch), `$RC` (relay command — transparent passthrough to
 a Leaf), `$RQ` (request status).
-**Env Sensor Branch → STM32:** `$EN` (env record, 10 Hz, 17 fields), `$SB` (status).
+**Env Sensor Branch → STM32:** `$EN` (env record, 10 Hz, 20 fields per `system_plan_v2_2_amendment.md`), `$SB` (status).
 
 Full field tables in `specs/wifi24_leaf_protocol_v1_1.md` and
 `specs/branch_controller_wifi24_v1_0.md`.
@@ -159,32 +160,39 @@ Full field tables in `specs/wifi24_leaf_protocol_v1_1.md` and
 
 ## 5. Current State
 
-### 5.1 Built and working
+### 5.1 Written and building in CI
 
-- **2.4 GHz WiFi Branch — Leaf firmware (`leaf_wifi24`).** ESP32-C3, PlatformIO/Arduino,
-  11 source files. Single binary for all 4 Leaves; identity adopted from first `$CF`.
-  W1/W2/W3 park on channels 1/6/11 (beacon overlap captures all 11 US channels — see
-  §6); W4 is the WIDS Leaf, hops 1–14 (incl. US-unauthorized 12–14) for evil-twin and
-  deauth-flood detection. **Compiles and flashes successfully** (confirmed in VSCode/
-  PlatformIO).
-- **2.4 GHz WiFi Branch — Branch Controller firmware (`branch_wifi24`).** RP2040,
-  pico-sdk/CMake, 29 files, ~3,100 lines. Dual-core: Core 0 = 4× PIO UART Leaf links
-  with self-chaining DMA ring buffers + Leaf health watchdog; Core 1 = 1PPS timing,
-  dedup (500 ms windows, tombstone eviction), WIDS analysis, upstream TX to STM32.
-  True SPSC queues, no spinlocks. **Builds to UF2.**
+All six firmware trees are committed under `firmware/` and build in their per-tree
+GitHub Actions workflows. Per-tree versions, build commands, and deviation logs are in
+`CODE_STATUS.md`.
 
-### 5.2 Designed, specced, not built
+- **2.4 GHz WiFi — `leaf_wifi24`** (ESP32-C3, PlatformIO/Arduino, FW `1.2.0`) and
+  **`branch_wifi24`** (RP2040, pico-sdk → UF2, FW `1.1.0`). The original 2.4 GHz source
+  was lost with a prior sandbox; both are **re-derived from spec** (`wifi24_leaf_protocol_v1_1`
+  + v1.2 amendment; `branch_controller_wifi24_v1_0` + v1.1 amendment) and build in CI.
+- **5 GHz WiFi — `leaf_wifi5`** (ESP32-C5, PlatformIO/pioarduino, FW `1.0.1`) and
+  **`branch_wifi5`** (RP2040, pico-sdk → UF2, FW `1.0.0`). A band-select bug that kept the
+  C5 on 2.4 GHz (a `#ifdef` on a non-macro enumerator) was fixed in leaf `1.0.1`.
+- **Environmental Sensor Branch — `env_sensor_branch`** (RP2040, pico-sdk → UF2, FW
+  `1.0.0`). Direct I2C to ICM-42688-P, LIS3MDL, BMP390, SCD41, SGP41 *(SHT40 dropped —
+  subsumed by SCD41)*. Madgwick fusion at 100 Hz, decimated `$EN` at 10 Hz. The Sensirion
+  Gas Index Algorithm is a baseline-only stub in v1.0.x (VOC/NOx are constants until v1.1
+  — see `CODE_STATUS.md` §5).
+- **STM32 mid-tier — `stm32_aggregator`** (NUCLEO-H753ZI ×2, bare-metal HAL, FW `1.0.1`).
+  Portable `App/` over a PAL; `Core/` hand-codes the clock/peripheral init. CI builds both
+  the host-smoke library and the on-target `.elf`/`.bin` for both units. The clock tree
+  was corrected to a coherent 480/240/120 MHz this pass (with I2C `TIMINGR` and TIM2
+  prescaler recomputed). `gps_push_config()` is a no-op; the GPS is pre-configured via
+  u-center (documented; UBX-at-boot deferred to v1.1).
 
-- **Environmental Sensor Branch.** Single RP2040, no Leaf tier; direct I2C to
-  ICM-42688-P (IMU), LIS3MDL (mag), BMP390 (baro), SCD41 (CO2/RH/temp), SGP41 (VOC).
-  *(SHT40 dropped — subsumed by SCD41.)* Madgwick fusion at 100 Hz, decimated `$EN`
-  at 10 Hz. Identified as the simplest next Branch.
+### 5.2 Not built yet
+
+- **The six remaining protocol Branches** (Leaf + BC firmware each): BLE/BT (ESP32-S3),
+  802.15.4 (ESP32-H2), Meshtastic/Meshcore (LoRa), VHF ISM (315/433), UHF ISM (868/915),
+  FPV (RX5808). Specs exist under `specs/`.
 - **Analyzer application.** Fork SSA as infrastructure base; gut GNSS-specific
   schema/routes; port `analysis_engine.py` and `data_sources.py` from Wardriving
-  Analyzer as new modules. React/TS/Vite frontend, SQLite, Leaflet, Recharts, PDF
-  theming. Not started against MKII.
-- **All other Branches:** 5 GHz WiFi, BLE/BT, 802.15.4, Meshtastic, VHF/UHF ISM, FPV.
-- **STM32 firmware (both units).** Nothing written yet — see TODO.
+  Analyzer. React/TS/Vite, SQLite, Leaflet, Recharts, PDF theming. Not started.
 - **Jetson Trunk** software (SDR sidecar, Whisper, DB writer, USB-CDC ingest).
 
 ### 5.3 Antenna / hardware decisions locked
@@ -224,55 +232,58 @@ Full field tables in `specs/wifi24_leaf_protocol_v1_1.md` and
 
 ## 7. Code Inventory — What Exists and Where
 
-> Critical for the code-side handoff. The two firmware archives below are **real,
-> complete, and known-good**, but they are **not bundled in this package**. They were
-> produced in earlier sessions and written to a sandbox output directory that does not
-> persist. Retrieve them from the source conversations (links below) or re-export them,
-> then drop them into version control. Do **not** attempt to reconstruct them from spec
-> text — the specs describe intent, the archives are the implementation, and they
-> contain deliberate, documented deviations from the specs.
+All firmware is committed in this repository under `firmware/`. See `CODE_STATUS.md` for
+the per-file breakdown, build commands, versions, and the deviation log per tree.
 
-See `CODE_STATUS.md` in this package for the per-file breakdown, build/flash
-instructions, and the full list of spec deviations baked into each archive.
-
-| Archive | Target | Build | Status | Where to get it |
+| Tree | Target | Build | Version | CI |
 |---|---|---|---|---|
-| `leaf_wifi24.zip` | ESP32-C3 | PlatformIO/Arduino | Flashes OK | Chat "ESP32-C6 WiFi development code" (a5d7ac7c) — `present_files` output |
-| `branch_wifi24.zip` | RP2040 | pico-sdk/CMake → UF2 | Builds OK | Same chat (a5d7ac7c) — `present_files` output |
+| `firmware/leaf_wifi24` | ESP32-C3 | PlatformIO/Arduino | `1.2.0` | `leaf_wifi24.yml` |
+| `firmware/branch_wifi24` | RP2040 | pico-sdk/CMake → UF2 | `1.1.0` | `branch_wifi24.yml` |
+| `firmware/leaf_wifi5` | ESP32-C5 | PlatformIO/pioarduino → Arduino | `1.0.1` | `leaf_wifi5.yml` |
+| `firmware/branch_wifi5` | RP2040 | pico-sdk/CMake → UF2 | `1.0.0` | `branch_wifi5.yml` |
+| `firmware/env_sensor_branch` | RP2040 | pico-sdk/CMake → UF2 | `1.0.0` | `env_sensor_branch.yml` |
+| `firmware/stm32_aggregator` | NUCLEO-H753ZI ×2 | bare-metal HAL (CMake) + host-smoke | `1.0.1` | `stm32_aggregator.yml` |
 
-Neither the SSA fork nor the Wardriving Analyzer codebase is in this package; both
-are external prior codebases referenced as the analyzer's starting point.
+`leaf_wifi24` and `branch_wifi24` are **re-derivations from spec** — the original 2.4 GHz
+source was lost with a prior sandbox, so they were rebuilt from `wifi24_leaf_protocol_v1_1.md`
++ v1.2 amendment and `branch_controller_wifi24_v1_0.md` + v1.1 amendment, and version-bumped
+to fold those amendments in. Their correctness rests on CI compilation plus bench bring-up,
+**not** the prior manual VSCode/PlatformIO confirmation.
+
+Neither the SSA fork nor the Wardriving Analyzer codebase is in this repository; both are
+external prior codebases referenced as the analyzer's starting point.
 
 ---
 
 ## 8. Outstanding Work (TODO)
 
-Ordered roughly by the build sequence (software phase gates hardware).
+Ordered roughly by the build sequence (software phase gates hardware). The firmware that
+was "to write" in the prior handoff (STM32 aggregator, Env Sensor, 5 GHz WiFi) is now
+written and building in CI; the work ahead is bench bring-up plus the six unbuilt Branches.
 
-### Immediate (2.4 GHz WiFi Branch bring-up)
-1. Retrieve `leaf_wifi24.zip` and `branch_wifi24.zip` into a repo (see §7).
-2. Flash the 4 XIAO ESP32-C3 Leaf units; set RF-switch solder bridge to external
-   antenna on each; verify GPIO pinout against the BC firmware pin map.
-3. Bench-test BC + 1 Leaf, then BC + 4 Leaves (procedures in
-   `specs/branch_controller_wifi24_v1_0.md` §13 and
-   `specs/wifi24_leaf_protocol_v1_1.md` §11).
+### Bench bring-up of the written firmware
+1. **STM32 aggregator:** flash both unit images; verify the 480 MHz clock, 400 kHz I2C
+   SCL, and 1 MHz TIM2 tick on a scope (`specs/stm32_h753_firmware_v1_0.md` §13); then
+   GPS-only (`$AG`/`$TM`/PPS) with a **u-center-preconfigured** M10 (the firmware does not
+   push UBX config — see the STM32 README §GPS pre-configuration).
+2. **2.4 GHz + 5 GHz WiFi Branches:** flash Leaves + BC; verify the leaf_wifi5 band-select
+   fix puts the C5 on 5 GHz; bench-test BC + 1 Leaf then BC + N Leaves (spec §13/§11).
+   On the C3 Leaves set the RF-switch solder bridge to external antenna; verify GPIO pinout
+   vs. the BC firmware pin map.
+3. **Env Sensor Branch:** verify `$EN`/`$SB`; treat `voc`/`nox` as baseline-only until the
+   v1.1 gas-index integration.
 
-### STM32 firmware (blocking for any Branch→Trunk path) — none written yet
-4. `$TM` generation after each PPS edge.
-5. `$RC` relay passthrough to the correct Branch UART.
-6. Branch UART parsing + SD-card write format (standalone mode).
-7. USB-CDC streaming to the Trunk.
-
-### Next Branch
-8. Build the Environmental Sensor Branch (simplest; lives on STM32 #1's USART6).
+### Six unbuilt protocol Branches (Leaf + BC each)
+4. BLE/BT (ESP32-S3), 802.15.4 (ESP32-H2), Meshtastic/Meshcore (LoRa), VHF ISM (315/433),
+   UHF ISM (868/915), FPV (RX5808). Specs are in `specs/`.
 
 ### Analyzer
-9. Fork SSA; gut GNSS schema/routes; port `analysis_engine.py` + `data_sources.py`.
-10. Stand up the SQLite schema (DDL in the specs) + CSV import pipeline.
+5. Fork SSA; gut GNSS schema/routes; port `analysis_engine.py` + `data_sources.py`.
+6. Stand up the SQLite schema (DDL in the specs) + CSV import pipeline.
 
 ### SDR (Jetson)
-11. rtl_433 as a sidecar for known-device decoding + GPS-tagging wrapper + DB ingest
-    adapter (small-scope items already identified).
+7. rtl_433 as a sidecar for known-device decoding + GPS-tagging wrapper + DB ingest
+   adapter (small-scope items already identified).
 
 ### Open hardware questions (not yet resolved)
 - Power regulation/budget for RP2040 + 4× ESP32-C3 (not analyzed).
@@ -289,52 +300,74 @@ Ordered roughly by the build sequence (software phase gates hardware).
 
 ## 9. ⚠ Version / Consistency Issues to Resolve
 
-These are stale references the code side should not trust blindly:
+### Resolved (this pass, 2026-06-01)
 
-1. **STM32 board changed; docs not fully updated.** The current board is the
-   **NUCLEO-H753ZI** (144-pin **STM32H753ZIT6**, no onboard SDRAM, all 8 UARTs
-   accessible), purchased via DigiKey from an authorized source. The prior
-   **FK743M2-IIT6** (STM32H743IIT6) was **abandoned** — its onboard SDRAM pin conflicts
-   blocked UART3/7/8 and the SD card conflicted on UART5. However:
-   - `specs/system_plan_v2.md` §6 and `specs/system_plan_v2_1_amendment.md` §6 still
-     list `"device": "FK743M2-IIT6"` in the `stm32_units` block.
-   - `hardware_reference/canvas.png` and `hardware_reference/FK743LAYOUT.pdf` document
-     the **abandoned** FK743 board. They're retained as historical reference only;
-     they do **not** describe the current hardware.
-   - Note the part change is H743→H753 (adds crypto; otherwise pin-compatible family).
-   **Action:** when STM32 firmware/specs are next revised, update the board name and
-   regenerate pinout against the NUCLEO-H753ZI.
+1. **STM32 board (FK743 → NUCLEO-H753ZI).** The FK743M2-IIT6 references in
+   `system_plan_v2.md` and `system_plan_v2_1_amendment.md` `stm32_units` blocks now carry
+   dated inline **correction notes** pointing to the NUCLEO-H753ZI (STM32H753ZIT6); the
+   authoritative hardware is defined in `stm32_h753_firmware_v1_0.md`. History is preserved
+   (the JSON is left in place under the note). `hardware_reference/canvas.png` and
+   `FK743LAYOUT.pdf` remain, **labeled abandoned** (see §10).
+2. **Env Sensor sensor set (SHT40 → SCD41 + SGP41).** Resolved by
+   `system_plan_v2_2_amendment.md`; the v2.1 SHT40 text is superseded.
+3. **STM32 clock tree.** `SystemClock_Config` now yields a coherent 480/240/120 MHz tree;
+   the I2C1 `TIMINGR` (now genuine 400 kHz @ 120 MHz PCLK1) and TIM2 prescaler (1 MHz tick)
+   were recomputed to match. STM32 FW bumped to `1.0.1`.
+4. **5 GHz band-select bug.** `leaf_wifi5` no longer compiles out `esp_wifi_set_band` via a
+   dead `#ifdef`; FW bumped to `1.0.1`.
+5. **leaf_wifi5 README platform claim.** Now correctly states the pioarduino fork (matching
+   `platformio.ini`), not mainline `espressif32`.
 
-2. **Env Sensor sensor set changed.** Spec amendment §3.8 lists SHT40 for
-   thermo/humidity. Current design **drops SHT40** (subsumed by **SCD41**) and adds
-   **SGP41** (VOC). The amendment text is stale on this point.
+### Open placeholders (recorded, not silent — both targeted v1.1)
 
-3. **`specs/Wardriving_Project_Snapshot_1_.md` is pre-MKII history.** It documents the
-   *previous* ESP32-S3/ESP8266 wardriving rig and the Wardriving Analyzer v4.4.11. It's
-   included for lineage/context only — it is **not** the MKII design. Where it conflicts
-   with `system_plan_v2*`, the v2 docs win.
+6. **STM32 `gps_push_config()` is a no-op.** GPS must be pre-configured via u-center
+   (STM32 README §GPS pre-configuration; `stm32_h753_firmware_v1_0.md` §14 item 2).
+7. **Env Sensor SGP41 Gas Index Algorithm is a stub.** `$EN` `voc`/`nox` are baseline-only
+   constants until integrated (`env_sensor_branch_v1_0.md` §14 item 9).
 
-4. **Document version ladder.** Authoritative order: `system_plan_v2.md` (2026-04-03)
-   → `system_plan_v2_1_amendment.md` (2026-04-04, amends specific sections of v2). The
-   amendment does not restate unchanged sections; read both together.
+### Still genuinely stale / context-only
+
+8. **`specs/Wardriving_Project_Snapshot_1_.md` is pre-MKII history** (ESP32-S3/ESP8266 rig,
+   Wardriving Analyzer v4.4.11). Lineage/context only; where it conflicts with
+   `system_plan_v2*`, the v2 docs win. (It still mentions FK743 in its historical context —
+   left as-is, since it is a snapshot of prior history, not current design.)
+
+9. **Document version ladder.** Authoritative order: `system_plan_v2.md` (2026-04-03)
+   → `system_plan_v2_1_amendment.md` (2026-04-04) → `system_plan_v2_2_amendment.md`
+   (2026-05-29). Each amendment restates only the sections it changes; read all three
+   together.
 
 ---
 
 ## 10. Package Layout
 
 ```
-MKII_handoff/
-├── HANDOFF.md                          # this document — start here
-├── CODE_STATUS.md                      # firmware inventory, build/flash, deviations
-├── specs/
-│   ├── system_plan_v2.md               # authoritative architecture (2026-04-03)
-│   ├── system_plan_v2_1_amendment.md   # 1PPS + Env Branch + ESP32-C3 (2026-04-04)
-│   ├── branch_controller_wifi24_v1_0.md# RP2040 BC firmware guide
-│   ├── wifi24_leaf_protocol_v1_1.md    # Leaf↔BC protocol + Leaf firmware guide
-│   └── Wardriving_Project_Snapshot_1_.md # pre-MKII history (context only)
-└── hardware_reference/
-    ├── canvas.png                      # FK743M2-IIT6 mechanical drawing (ABANDONED board)
-    └── FK743LAYOUT.pdf                 # FK743M2-IIT6 pin layout (ABANDONED board)
+<repo root>/
+├── firmware/                           # all six firmware trees (each builds in CI)
+│   ├── leaf_wifi24/        ESP32-C3   PlatformIO/Arduino       FW 1.2.0
+│   ├── branch_wifi24/      RP2040     pico-sdk/CMake → UF2     FW 1.1.0
+│   ├── leaf_wifi5/         ESP32-C5   PlatformIO/pioarduino    FW 1.0.1
+│   ├── branch_wifi5/       RP2040     pico-sdk/CMake → UF2     FW 1.0.0
+│   ├── env_sensor_branch/  RP2040     pico-sdk/CMake → UF2     FW 1.0.0
+│   └── stm32_aggregator/   H753ZI ×2  bare-metal HAL + host-smoke  FW 1.0.1
+├── .github/workflows/                  # one build workflow per firmware tree
+└── MKII_handoff/
+    ├── HANDOFF.md                      # this document — start here
+    ├── CODE_STATUS.md                  # firmware inventory, build, versions, deviations
+    ├── specs/
+    │   ├── system_plan_v2.md                  # authoritative architecture (2026-04-03)
+    │   ├── system_plan_v2_1_amendment.md      # 1PPS + Env Branch + ESP32-C3 (2026-04-04)
+    │   ├── system_plan_v2_2_amendment.md      # SCD41 + SGP41 sensor set, $EN v2 (2026-05-29)
+    │   ├── stm32_h753_firmware_v1_0.md         # STM32 aggregator spec (NUCLEO-H753ZI)
+    │   ├── wifi24_leaf_protocol_v1_1.md + v1_2_amendment.md   # 2.4 GHz Leaf protocol
+    │   ├── branch_controller_wifi24_v1_0.md + v1_1_amendment.md  # 2.4 GHz BC guide
+    │   ├── wifi5_branch_v1_0.md                # 5 GHz Leaf + BC guide
+    │   ├── env_sensor_branch_v1_0.md           # Env Sensor Branch guide
+    │   ├── blebt / dot154 / meshtastic / vhf_ism / uhf_ism / fpv _branch_v1_0.md  # unbuilt Branches
+    │   └── Wardriving_Project_Snapshot_1_.md   # pre-MKII history (context only)
+    └── hardware_reference/             # ABANDONED FK743 board — historical only
+        ├── canvas.png                  # FK743M2-IIT6 mechanical drawing (ABANDONED)
+        └── FK743LAYOUT.pdf             # FK743M2-IIT6 pin layout (ABANDONED)
 ```
 
 ---

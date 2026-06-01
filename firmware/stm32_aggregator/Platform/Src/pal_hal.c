@@ -11,8 +11,8 @@
  *      Core/Src/i2c.c, Core/Src/sdmmc.c, Core/Src/usb_otg.c, etc., plus
  *      Drivers/STM32H7xx_HAL_Driver/.
  *   2. Replace the CubeMX-generated USER CODE sections in main.c with
- *      a call to app_main() (see Core/Src/main_stub.c here for the
- *      exact shape).
+ *      a call to app_main() (see Core/Src/main.c here for the worked
+ *      example — it is the real, on-target entry point).
  *   3. Implement the function bodies below by calling the HAL handles
  *      that CubeMX produced (huart1, huart2, ..., hi2c1, hsd1, hUsbDeviceFS).
  *      The function signatures here are the contract App/ depends on;

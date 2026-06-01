@@ -9,7 +9,7 @@
 #endif
 
 #ifndef MKII_FW_VERSION
-#define MKII_FW_VERSION "1.0.0"
+#define MKII_FW_VERSION "1.0.1"
 #endif
 
 #define MAX_LINE_LEN              200

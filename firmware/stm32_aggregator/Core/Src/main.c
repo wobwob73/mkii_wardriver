@@ -40,7 +40,18 @@ volatile uint8_t  g_usb_cdc_attached = 0;
 extern void MX_USB_DEVICE_Init(void);
 extern void pal_pps_dispatch_from_isr(void);
 
-/* ----- Clock tree: 480 MHz CPU / 240 MHz AXI / 100 MHz APB ----- */
+/* ----- Clock tree: 480 MHz SYSCLK/CPU, 240 MHz AXI/AHB, 120 MHz APB -----
+ *
+ * HSE 8 MHz (ST-LINK MCO bypass) / PLLM=4 -> 2 MHz PLL input (VCIRANGE_1).
+ * PLLN=480 -> 960 MHz VCO (wide range, VOS0) / PLLP=2 -> 480 MHz SYSCLK.
+ * AHB /2 -> 240 MHz HCLK (AXI). APB1/2/3/4 /2 -> 120 MHz PCLK.
+ *
+ * Downstream consequences encoded elsewhere in this file:
+ *   - I2C1 kernel clock = D2PCLK1 = PCLK1 = 120 MHz  -> TIMINGR recomputed
+ *     for 400 kHz (see MX_I2C1_Init).
+ *   - TIM2 APB1 timer clock = 2 x PCLK1 = 240 MHz (APB1 prescaler != 1)
+ *     -> prescaler 239 for a 1 MHz tick (see MX_TIM2_Init).
+ */
 
 void SystemClock_Config(void) {
     RCC_OscInitTypeDef osc = {0};
@@ -55,10 +66,10 @@ void SystemClock_Config(void) {
     osc.HSEState = RCC_HSE_BYPASS;            /* NUCLEO-H753ZI feeds 8 MHz from ST-LINK MCO */
     osc.PLL.PLLState = RCC_PLL_ON;
     osc.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-    osc.PLL.PLLM = 4;
-    osc.PLL.PLLN = 240;                       /* 8 / 4 * 240 = 480 MHz */
-    osc.PLL.PLLP = 2;
-    osc.PLL.PLLQ = 20;
+    osc.PLL.PLLM = 4;                         /* 8 MHz / 4 = 2 MHz PLL input */
+    osc.PLL.PLLN = 480;                        /* 2 MHz * 480 = 960 MHz VCO */
+    osc.PLL.PLLP = 2;                          /* 960 / 2 = 480 MHz SYSCLK */
+    osc.PLL.PLLQ = 20;                         /* 960 / 20 = 48 MHz (SDMMC kernel) */
     osc.PLL.PLLR = 2;
     osc.PLL.PLLRGE = RCC_PLL1VCIRANGE_1;
     osc.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
@@ -71,11 +82,11 @@ void SystemClock_Config(void) {
                      RCC_CLOCKTYPE_D3PCLK1 | RCC_CLOCKTYPE_D1PCLK1);
     clk.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
     clk.SYSCLKDivider = RCC_SYSCLK_DIV1;
-    clk.AHBCLKDivider = RCC_HCLK_DIV2;        /* 240 MHz AXI */
-    clk.APB3CLKDivider = RCC_APB3_DIV2;       /* 120 MHz */
-    clk.APB1CLKDivider = RCC_APB1_DIV2;       /* 100 MHz APB1 (PCLK1) */
-    clk.APB2CLKDivider = RCC_APB2_DIV2;       /* 100 MHz APB2 */
-    clk.APB4CLKDivider = RCC_APB4_DIV2;
+    clk.AHBCLKDivider = RCC_HCLK_DIV2;        /* 480 / 2 = 240 MHz HCLK (AXI/AHB) */
+    clk.APB3CLKDivider = RCC_APB3_DIV2;       /* 240 / 2 = 120 MHz PCLK3 */
+    clk.APB1CLKDivider = RCC_APB1_DIV2;       /* 240 / 2 = 120 MHz PCLK1 */
+    clk.APB2CLKDivider = RCC_APB2_DIV2;       /* 240 / 2 = 120 MHz PCLK2 */
+    clk.APB4CLKDivider = RCC_APB4_DIV2;       /* 240 / 2 = 120 MHz PCLK4 */
     rc = HAL_RCC_ClockConfig(&clk, FLASH_LATENCY_4);
     if (rc != HAL_OK) Error_Handler();
 
@@ -188,7 +199,16 @@ static void MX_UART7_Init(void)  { uart_init(&huart7, UART7,  BRANCH_UART_BAUD);
 
 static void MX_I2C1_Init(void) {
     hi2c1.Instance = I2C1;
-    hi2c1.Init.Timing = 0x10C0ECFFu;           /* 400 kHz @ 100 MHz APB1 */
+    /* Fast Mode 400 kHz at I2C1 kernel clock = PCLK1 = 120 MHz.
+     * PRESC=5 -> t_presc = (5+1)/120MHz = 50 ns.
+     *   SCLL = 0x1D (29) -> t_low  = 30 * 50 ns = 1500 ns
+     *   SCLH = 0x13 (19) -> t_high = 20 * 50 ns = 1000 ns  (t_scl = 2500 ns = 400 kHz)
+     *   SDADEL = 2, SCLDEL = 3 -> data hold/setup within Fast Mode limits.
+     * TIMINGR = PRESC[31:28]<<28 | SCLDEL[27:24]<<24 | SDADEL[23:20]<<20
+     *           | SCLH[15:8]<<8 | SCLL[7:0] = 0x5320131D.
+     * (Rise/fall time pushes the real rate slightly under 400 kHz, which is
+     *  spec-compliant; verify on a logic analyzer during bring-up.) */
+    hi2c1.Init.Timing = 0x5320131Du;           /* 400 kHz @ 120 MHz PCLK1 */
     hi2c1.Init.OwnAddress1 = 0;
     hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
     hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -218,7 +238,10 @@ static void MX_TIM2_Init(void) {
     TIM_MasterConfigTypeDef sMasterConfig = {0};
 
     htim2.Instance = TIM2;
-    htim2.Init.Prescaler = 99;                 /* 100 MHz / 100 = 1 MHz */
+    /* TIM2 is on APB1. With APB1 prescaler != 1, the timer kernel clock is
+     * 2 x PCLK1 = 240 MHz. 240 MHz / (239 + 1) = 1 MHz tick. The 1 MHz tick
+     * is load-bearing: pal_time_us_64() treats each count as one microsecond. */
+    htim2.Init.Prescaler = 239;                /* 240 MHz APB1 timer clk / 240 = 1 MHz */
     htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
     htim2.Init.Period = 0xFFFFFFFFu;
     htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;

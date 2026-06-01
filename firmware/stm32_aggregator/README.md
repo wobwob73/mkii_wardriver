@@ -24,28 +24,55 @@ firmware/stm32_aggregator/
 │   ├── sd_log.{h,c}              FatFS session file management
 │   └── app_main.{h,c}            top-level state machine and $AG heartbeat
 │
-├── Platform/                     Platform Abstraction Layer
+├── Platform/                     Platform Abstraction Layer + on-target glue
 │   ├── Inc/pal.h                 PAL contract (called by App/)
-│   └── Src/pal_hal.c             stub HAL backing — fill in with your CubeMX handles
+│   ├── Src/pal_hal.c             stub PAL backing (host-smoke build only)
+│   ├── Src/pal_hal_stm32h7.c     real STM32H7 HAL-backed PAL (on-target build)
+│   ├── USB/                      USB CDC device class glue (usbd_conf/desc/cdc_if)
+│   ├── FatFS/                    ffconf.h + sd_diskio.c (SDMMC1 disk I/O)
+│   ├── Linker/STM32H753ZITX_FLASH.ld
+│   └── arm-none-eabi.cmake       ARM bare-metal toolchain file
 │
-├── Core/                         CubeMX scaffold seam
+├── Core/                         on-target entry point + HAL scaffold
 │   ├── Inc/stm32_config.h        per-unit pin map + Branch table
-│   └── Src/main_stub.c           example showing where to plug app_main()
+│   ├── Inc/main.h                pin map + HAL handle externs
+│   ├── Inc/stm32h7xx_hal_conf.h  HAL module enables + clock constants
+│   ├── Src/main.c                SystemClock_Config + MX_*_Init + app_main() entry
+│   ├── Src/stm32h7xx_hal_msp.c   per-peripheral MSP init (GPIO AF, DMA, NVIC)
+│   └── Src/stm32h7xx_it.c        interrupt handlers
 │
-├── CMakeLists.txt                host smoke build (no HAL needed)
+├── CMakeLists.txt                host-smoke (default) + on-target (MKII_STM32_TARGET=on)
 └── README.md                     this file
 ```
 
-## HAL bring-up (one-time)
+## On-target build (implemented)
 
-The PAL `Platform/Src/pal_hal.c` is a stub. To produce a flashable image you must back the PAL with the STM32H7 HAL.
+The HAL bring-up is **done in-tree** — there is no CubeMX checkout step. `Core/Src/main.c`
+hand-codes `SystemClock_Config()` + every `MX_*_Init()`, `Platform/Src/pal_hal_stm32h7.c`
+backs the PAL with real HAL calls, and the on-target CMake target fetches the STM32CubeH7
+HAL/USB/FatFS via `FetchContent` (pinned tag). It produces a flashable image:
 
-1. Open **STM32CubeMX** and create a new project for the `NUCLEO-H753ZI` board. Configure:
+```
+mkdir build-target && cd build-target
+cmake -G Ninja \
+  -DMKII_STM32_TARGET=on \
+  -DMKII_STM32_UNIT=1 \
+  -DCMAKE_TOOLCHAIN_FILE=../Platform/arm-none-eabi.cmake ..
+ninja                                  # → stm32_aggregator_unit1.{elf,bin,hex}
+```
+
+Requires `arm-none-eabi-gcc` (12.x+) and network access for the first configure (CubeH7
+shallow clone; cached afterward). CI builds both units on every push.
+
+The clock tree is **480 MHz SYSCLK / 240 MHz AXI / 120 MHz APB** (`SystemClock_Config`),
+with the I2C1 `TIMINGR` and TIM2 prescaler derived from the 120 MHz PCLK1 — see the inline
+derivations in `main.c`. The pin/peripheral map below is the authoritative reference for
+the hand-coded init (and for a CubeMX round-trip, if you ever want one):
 
    | Peripheral | Mode | Pins / Notes |
    |---|---|---|
-   | RCC | HSE Crystal/Ceramic Resonator | NUCLEO HSE 8 MHz |
-   | Clock | SYSCLK 480 MHz, AXI 240 MHz, APB1/2 100 MHz | |
+   | RCC | HSE bypass (ST-LINK MCO) | NUCLEO HSE 8 MHz |
+   | Clock | SYSCLK 480 MHz, AXI 240 MHz, APB1/2/3/4 120 MHz | VOS0 |
    | USART1 | Async, 230400 8N1, DMA RX circular | PA9 TX, PA10 RX |
    | USART2 | Async, 230400 8N1, DMA RX circular | PD5 TX, PD6 RX |
    | USART3 | Async, 115200 8N1 (ST-LINK VCP) | PD8 TX, PD9 RX — debug only |
@@ -55,36 +82,30 @@ The PAL `Platform/Src/pal_hal.c` is a stub. To produce a flashable image you mus
    | I2C1 | Fast Mode 400 kHz | PB6 SCL, PB7 SDA |
    | SDMMC1 | 4-bit Wide Bus, default speed | PC8–PC12 + PD2 CMD |
    | USB_OTG_FS | Device-only, internal FS PHY | PA11 DM, PA12 DP |
-   | TIM2 | Base Init, 1 MHz tick (prescaler 99 from 100 MHz APB1) | free-running, used for `pal_time_us_64` |
+   | TIM2 | Base Init, 1 MHz tick (prescaler 239 from 240 MHz APB1 timer clock) | free-running, used for `pal_time_us_64` |
    | EXTI10 | Rising edge, NVIC enabled | PG10 (PPS input) |
    | IWDG | Window: 8 s | optional but recommended |
    | LEDs | Output PB0 (LD1), PE1 (LD2), PB14 (LD3) | |
 
-   Enable the FreeRTOS-free CubeMX option ("Generate as pair of .c/.h files per peripheral") and **enable** `USE_FATFS` middleware against `SDMMC1`. Enable `USB Device → Communication Device Class (Virtual Port Com)`.
+The `Core/` + `Platform/` sources already encode all of the above (peripheral modes,
+DMA streams, NVIC priorities, USB CDC, FatFS). There is no `.ioc` in the repo; the
+equivalent state lives in `main.c` + `stm32h7xx_hal_msp.c`. If you ever want to
+round-trip through CubeMX, import the project back rather than opening an `.ioc`, and
+mirror any changes into those two files.
 
-2. Generate the code. CubeMX produces `Core/Inc/main.h`, `Core/Src/main.c`, `Core/Src/usart.c`, etc., plus `Drivers/STM32H7xx_HAL_Driver/` and `Middlewares/`.
+## GPS pre-configuration (required before bench use)
 
-3. Drop the MKII tree into the generated project:
+`App/gps.c::gps_push_config()` is intentionally a **no-op** in v1.0.x — the firmware does
+not push UBX configuration at boot. The u-blox M10 module must be pre-configured once via
+**u-center** (settings persist in BBR/Flash):
 
-   ```
-   <cubemx_project>/
-   ├── Core/                  (existing, edit main.c to call app_main)
-   ├── Drivers/
-   ├── Middlewares/
-   ├── App/                   (← copy this repo's firmware/stm32_aggregator/App/)
-   └── Platform/              (← copy this repo's firmware/stm32_aggregator/Platform/)
-   ```
+- **NMEA output:** enable `RMC` + `GGA` at 1 Hz on the **I2C (DDC)** port; disable `GSV`,
+  `GSA`, `GLL`, `VTG`, `GNS` to keep the I2C read loop light.
+- **PPS (TIMEPULSE):** 1 Hz, ~100 ms pulse width, **rising edge UTC-aligned**, enabled
+  only when the module has a fix.
 
-   Reference the new sources from the CubeMX makefile / IDE source list.
-
-4. Edit `Core/Src/main.c`:
-   - Replace the contents of the `int main(void)` USER CODE blocks with `app_main();` (after `HAL_Init()` + `SystemClock_Config()` + `MX_*_Init()`).
-   - Add `HAL_GPIO_EXTI_Callback` that calls `pal_pps_dispatch_from_isr()` for `GPIO_PIN_10`.
-   - Both edits are demonstrated in `Core/Src/main_stub.c` here. Delete `main_stub.c` from the IDE source list before building.
-
-5. Edit `Platform/Src/pal_hal.c` to wire each TODO to the CubeMX HAL handles (`huart1`, `hi2c1`, `hsd1`, `hUsbDeviceFS`, `htim2`, etc.). The function signatures don't change; only the bodies.
-
-6. Build using the IDE / makefile generated by CubeMX. Produces `.elf` + `.bin` flashable via ST-LINK.
+Until then `$TM`/PPS timing is unavailable. Sending these as UBX `CFG-VALSET` frames at
+boot is tracked as a v1.1 item (STM32 spec §14 item 2). See the open-items register there.
 
 ## Host smoke build (no HAL)
 
