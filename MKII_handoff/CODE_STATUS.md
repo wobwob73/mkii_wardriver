@@ -258,19 +258,29 @@ unchanged from `branch_wifi24`; `gps`/`sd_log` ported from the STM32 `App/` laye
 **Not produced in light-duty v1.0** (by design): `$ET`/`$DF` (no WIDS Leaf), `$BC_T`
 (no BT Classic), `$WP` (no promiscuous probe source) — `lite_aggregator_v1_0.md` §6/§7.
 
-**SD backend is a documented PLACEHOLDER (decided this pass — keep stub, integrate later).**
-`src/sd_spi_fatfs.c` is the seam to the vendored FatFs-over-SPI library that §9 lists as
-`[NEW vendored]` and §14 item 5 flags as implementation-phase. The default build links a
-placeholder backend (`AGG_SD_BACKEND=stub`) that brings up SPI0 + card-detect and accounts
-writes but does **not** persist them, so `agg_lite.uf2` compiles in CI and the
-ring/session/state-machine/`$LA` path runs on the CDC mirror. This is the same convention
-as the STM32 PAL host-smoke stub, `gps_push_config()` no-op, and the SGP41 gas-index stub.
-Durable logging = vendor the library into `third_party/pico_fatfs_spi/` and reconfigure
-with `-DAGG_SD_BACKEND=fatfs` (a thin adapter; nothing above `sd_spi_fatfs.h` changes).
+**SD logging — two selectable backends behind one interface (`sd_spi_fatfs.h`).**
+- **`fatfs` (real, durable) — compiled + linked, HARDWARE-VERIFICATION-PENDING.** Built on
+  the vendored **carlk3 `no-OS-FatFS-SD-SPI-RPi-Pico`** (`third_party/pico_fatfs_spi/`,
+  **Apache-2.0**, pinned commit `196016f`), the `[NEW vendored]` library of §9 / §14 item 5.
+  `src/sd_spi_fatfs.c` (fatfs branch) maps the interface onto FatFs; `src/sd_hw_config.c`
+  supplies the SPI0 pin config (§1); the vendored `ffconf.h` is used as shipped. The §8
+  persistence path (session-from-first-fix, pending→rename, open-once/write-many, batched
+  ring drain, `f_sync` per flush, `FR_DISK_ERR` re-mount) drives it, and `$LA.sd_ok`/`sd_kb`
+  reflect the real card. CI builds+links it (`-DAGG_SD_BACKEND=fatfs`) — proving it builds
+  and links, **not** that a card is written; that is the bench step `lite_aggregator_v1_0.md`
+  §13.3. The placeholder is **retired** as the durable path.
+- **`stub` (default, non-durable).** Accounts writes but discards them, so `agg_lite.uf2`
+  builds without a card and the ring/session/`$LA` path runs on the CDC mirror. Same
+  convention as the STM32 PAL host-smoke stub / `gps_push_config()` no-op / SGP41 stub.
+
 Also: GPS transport is UART1 not I2C (§1, open item 1); `gps_push_config()` is a no-op
 (§5, open item 6). Full deviation log in `firmware/agg_lite/README.md`.
 
-**Build:** `mkdir build && cd build && cmake -G Ninja -DPICO_BOARD=pico .. && ninja agg_lite` → `agg_lite.uf2`.
+**Build:** `cmake -G Ninja -DPICO_BOARD=pico [-DAGG_SD_BACKEND=fatfs] .. && ninja agg_lite` → `agg_lite.uf2`. CI builds both backends.
+
+**Third-party license:** `third_party/pico_fatfs_spi/` vendors carlk3
+`no-OS-FatFS-SD-SPI-RPi-Pico` (commit `196016f`) under **Apache-2.0**; its `LICENSE` is
+retained verbatim and the tree is unmodified (provenance in `…/VENDOR.md`).
 
 ---
 

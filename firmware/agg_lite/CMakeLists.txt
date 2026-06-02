@@ -44,9 +44,20 @@ target_compile_definitions(agg_lite PRIVATE
 if(NOT DEFINED AGG_SD_BACKEND)
     set(AGG_SD_BACKEND "stub")
 endif()
+message(STATUS "agg_lite SD backend: ${AGG_SD_BACKEND}")
 if(AGG_SD_BACKEND STREQUAL "fatfs")
+    # Vendored carlk3 no-OS-FatFS-SD-SPI-RPi-Pico (Apache-2.0, pinned 196016f).
+    # Its CMakeLists defines an INTERFACE target whose sources compile into the
+    # consumer (agg_lite). The app supplies hw_config in src/sd_hw_config.c.
+    add_subdirectory(third_party/pico_fatfs_spi/FatFs_SPI)
     target_compile_definitions(agg_lite PRIVATE AGG_SD_BACKEND_FATFS=1)
-    # add_subdirectory(third_party/pico_fatfs_spi) and link it here.
+    target_sources(agg_lite PRIVATE src/sd_hw_config.c)
+    target_include_directories(agg_lite PRIVATE
+        third_party/pico_fatfs_spi/FatFs_SPI/ff15/source
+        third_party/pico_fatfs_spi/FatFs_SPI/sd_driver
+        third_party/pico_fatfs_spi/FatFs_SPI/include
+    )
+    target_link_libraries(agg_lite FatFs_SPI hardware_rtc)
 endif()
 
 target_include_directories(agg_lite PRIVATE
