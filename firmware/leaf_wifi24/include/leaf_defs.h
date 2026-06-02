@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #ifndef LEAF_VERSION
-#define LEAF_VERSION "1.2.1"
+#define LEAF_VERSION "1.2.2"
 #endif
 
 #ifndef MAX_LINE_LEN

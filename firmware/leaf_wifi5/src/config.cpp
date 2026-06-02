@@ -27,6 +27,12 @@ void init() {
 bool adopt_from_cf(const char *leaf_id, LeafMode mode, ChannelSetId set_id,
                    uint16_t dwell_ms) {
     if (!valid_leaf_id(leaf_id)) return false;
+    /* Mode is enum-coerced from a wire byte (cmd_handler.cpp::handle_cf casts
+     * an `int` to LeafMode). Reject anything outside the declared enum so a
+     * corrupt or future $CF cannot put the leaf into an unknown state. With
+     * F-001 fixed, $CF actually reaches W5_2/W5_3, so an unvalidated mode
+     * byte now matters in practice. */
+    if (mode != LEAF_MODE_SCAN && mode != LEAF_MODE_WIDS) return false;
     if (set_id < CSID_UNII1 || set_id > CSID_ALL_5G) return false;
 
     g_cfg.adopted = true;

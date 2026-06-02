@@ -339,21 +339,42 @@ written firmware; the deferred items are recorded with version targets below.
     "spin until `availableForWrite() ≥ n`" with chunked writes + 50 ms
     deadline + drop counter in `$HB`.
 
+### Second-review delta (2026-06-02)
+
+A second external review of the same branch re-discovered most of the same
+items already on the deferred list. The one finding whose reachability changed
+because of F-001 — `$CF` mode validation in both leaf trees — was pulled
+forward and is now in `leaf_wifi24 1.2.2` / `leaf_wifi5 1.0.3`:
+`adopt_from_cf()` now rejects mode values outside the declared `LeafMode`
+enum at the boundary, so a corrupt or future-extended `$CF` cannot place a
+leaf into an unknown state. Existing `hb::note_error()` path increments the
+error counter.
+
+The other second-review findings (per-leaf RX init rc, ESP `esp_wifi_*` rc,
+SDK fragility, branch identity-vs-slot mismatch, FetchContent network need)
+were already covered by F-012 / F-016 / documented design choices and remain
+on the v1.1 plan.
+
 ### Deferred review items (open-items registers; v1.1+ targets)
 
-Tracked but not implemented in this pass; recorded so they don't get lost:
+Tracked but not implemented; recorded so they don't get lost:
 
 - **F-007 full evil-twin redesign** (SSID-keyed tracking, security downgrade
   detection). Target: BC v1.2+. W4 WIDS bench bring-up is the gating event.
 - **F-009** invalid hex SSID payloads collapsing to "empty SSID" rather than
   being rejected. Target: BC v1.2+.
 - **F-012** ignored init/runtime return codes (`pio_uart_subsys_init`,
+  `pio_uart_rx_init` per-leaf, `esp_wifi_*` return codes,
   `HAL_UART_Receive_DMA`, `pal_sd_open_append`). Target: per-tree v1.1+.
 - **F-013** SD heartbeat reports OK if mounted even when no log files opened.
   Target: STM32 v1.1.
 - **F-016** numeric parser hardening (strict end-of-conversion checks, range
-  limits on channel / encryption / sat-count fields). Target: cross-tree
-  v1.1.
+  limits on channel / encryption / sat-count fields). `$CF` mode validation
+  resolved 2026-06-02 — the rest of F-016 remains. Target: cross-tree v1.1.
+- **Branch identity-vs-slot mismatch** (second review #10): the BC trusts
+  the physical UART slot's index more than the reported leaf ID. Adding a
+  mismatch counter is a diagnostic improvement, not a correctness bug.
+  Target: BC v1.2+.
 - **F-014** STM32 `gps_push_config()` no-op (u-center pre-config required);
   already documented (`stm32_h753_firmware_v1_0.md` §14 item 2).
 - **F-015** SGP41 baseline-only gas-index stub; already documented
