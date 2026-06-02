@@ -1,0 +1,98 @@
+name: stm32_aggregator
+
+on:
+  push:
+    branches: [main, claude/**]
+    paths:
+      - 'firmware/stm32_aggregator/**'
+      - '.github/workflows/stm32_aggregator.yml'
+  pull_request:
+    paths:
+      - 'firmware/stm32_aggregator/**'
+      - '.github/workflows/stm32_aggregator.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: stm32_aggregator-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  STM32CUBEH7_TAG: v1.11.2
+
+jobs:
+  host-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        unit: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake ninja-build build-essential
+      - name: Configure App/ + stub PAL (unit ${{ matrix.unit }})
+        run: |
+          cd firmware/stm32_aggregator
+          mkdir -p build${{ matrix.unit }}
+          cd build${{ matrix.unit }}
+          cmake -G Ninja -DMKII_STM32_UNIT=${{ matrix.unit }} ..
+      - name: Build static library
+        run: |
+          cd firmware/stm32_aggregator/build${{ matrix.unit }}
+          ninja
+      - name: Upload static library
+        uses: actions/upload-artifact@v4
+        with:
+          name: stm32_aggregator-unit${{ matrix.unit }}-app-lib
+          path: firmware/stm32_aggregator/build${{ matrix.unit }}/libmkii_stm32_app.a
+          if-no-files-found: warn
+
+  on-target:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        unit: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build build-essential git \
+            gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+      - name: Cache STM32CubeH7
+        id: cache-cubeh7
+        uses: actions/cache@v4
+        with:
+          path: stm32cubeh7-cache
+          key: stm32cubeh7-${{ env.STM32CUBEH7_TAG }}
+      - name: Pre-fetch STM32CubeH7 (shallow)
+        if: steps.cache-cubeh7.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth=1 --branch ${{ env.STM32CUBEH7_TAG }} \
+            https://github.com/STMicroelectronics/STM32CubeH7.git stm32cubeh7-cache
+      - name: Configure on-target (unit ${{ matrix.unit }})
+        run: |
+          cd firmware/stm32_aggregator
+          mkdir -p build-target-${{ matrix.unit }}
+          cd build-target-${{ matrix.unit }}
+          cmake -G Ninja \
+            -DMKII_STM32_TARGET=on \
+            -DMKII_STM32_UNIT=${{ matrix.unit }} \
+            -DMKII_STM32_CUBEH7_TAG=${{ env.STM32CUBEH7_TAG }} \
+            -DFETCHCONTENT_SOURCE_DIR_STM32CUBEH7=${{ github.workspace }}/stm32cubeh7-cache \
+            -DCMAKE_TOOLCHAIN_FILE=../Platform/arm-none-eabi.cmake \
+            ..
+      - name: Build on-target image
+        run: |
+          cd firmware/stm32_aggregator/build-target-${{ matrix.unit }}
+          ninja
+      - name: Upload on-target firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: stm32_aggregator-unit${{ matrix.unit }}-target
+          path: |
+            firmware/stm32_aggregator/build-target-${{ matrix.unit }}/stm32_aggregator_unit${{ matrix.unit }}.elf
+            firmware/stm32_aggregator/build-target-${{ matrix.unit }}/stm32_aggregator_unit${{ matrix.unit }}.bin
+            firmware/stm32_aggregator/build-target-${{ matrix.unit }}/stm32_aggregator_unit${{ matrix.unit }}.hex
+            firmware/stm32_aggregator/build-target-${{ matrix.unit }}/stm32_aggregator_unit${{ matrix.unit }}.map
+          if-no-files-found: warn
