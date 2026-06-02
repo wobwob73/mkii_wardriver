@@ -69,25 +69,40 @@ static void emit_bl(const BleAdvEvent *e) {
 }
 
 static void emit_bx(const BleAdvEvent *e) {
+    /* Bound the id into a fixed local so the snprintf below has no unbounded
+     * %s (which would trip ESP-IDF's -Werror=format-truncation). */
+    char id[8];
+    size_t idn = strnlen(cfg_id_str(), sizeof(id) - 1);
+    memcpy(id, cfg_id_str(), idn);
+    id[idn] = '\0';
+
     char bdaddr[18];
-    char manuf_hex[61];   /* <=30 bytes  -> <=60 hex (blebt §4.2)            */
-    char svc_hex[33];     /* <=16 bytes  -> <=32 hex                          */
-    char name_hex[33];    /* name beyond the 16 already in $BL, <=16 -> <=32  */
+    char manuf_hex[2 * BX_MANUF_MAX_BYTES + 1];        /* <=61 */
+    char svc_hex[2 * BX_SVC_MAX_BYTES + 1];            /* <=49 */
+    char name_hex[2 * BX_NAME_EXTRA_MAX_BYTES + 1];    /* <=33 */
     uart_proto_format_mac(e->bdaddr, bdaddr, sizeof(bdaddr));
 
-    /* Bound every field to its spec size so the framed $BX provably fits in
-     * MAX_LINE_LEN (a longer line would be truncated and break its checksum). */
-    uint8_t mlen = e->manuf_len > 30 ? 30 : e->manuf_len;
+    /* Combined cap so the UPSTREAM $BX (aggregator prepends branch_id +
+     * timestamp + time_flag) still fits MAX_LINE_LEN. Truncation here raises
+     * the $HB err_count as the truncation indicator (blebt §4.2). */
+    bool trunc = e->lost;
+
+    uint8_t mlen = e->manuf_len;
+    if (mlen > BX_MANUF_MAX_BYTES) { mlen = BX_MANUF_MAX_BYTES; trunc = true; }
     if (mlen == 0) strcpy(manuf_hex, "00");
     else uart_proto_hex_encode(e->manuf, mlen, manuf_hex, sizeof(manuf_hex));
 
-    uint8_t slen = e->svc_list_len > 16 ? 16 : e->svc_list_len;
+    /* svc_list is whole 2-byte UUID tokens; truncate on a token boundary. */
+    uint8_t slen = e->svc_list_len;
+    if (slen > BX_SVC_MAX_BYTES) { slen = BX_SVC_MAX_BYTES; trunc = true; }
+    slen = (uint8_t)(slen & ~1u);
     if (slen == 0) strcpy(svc_hex, "00");
     else uart_proto_hex_encode(e->svc_list, slen, svc_hex, sizeof(svc_hex));
 
     /* name_full_hex carries only the bytes beyond the 16 already in $BL. */
     if (e->name_len > 16) {
-        uint8_t extra = e->name_len > 32 ? 16 : (uint8_t)(e->name_len - 16);
+        uint8_t extra = (uint8_t)(e->name_len - 16);
+        if (extra > BX_NAME_EXTRA_MAX_BYTES) { extra = BX_NAME_EXTRA_MAX_BYTES; trunc = true; }
         uart_proto_hex_encode(e->name + 16, extra, name_hex, sizeof(name_hex));
     } else {
         strcpy(name_hex, "00");
@@ -95,8 +110,10 @@ static void emit_bx(const BleAdvEvent *e) {
 
     char body[MAX_LINE_LEN];
     snprintf(body, sizeof(body), "$BX,%s,%s,%s,%s,%s",
-             cfg_id_str(), bdaddr, manuf_hex, svc_hex, name_hex);
+             id, bdaddr, manuf_hex, svc_hex, name_hex);
     uart_proto_send_framed(body);
+
+    if (trunc) hb_note_error();   /* truncation indicator, surfaced via $HB */
 }
 
 static void emit_bk(uint32_t window_ms) {

@@ -40,6 +40,19 @@
 #define BLE_SEEN_MAX 64
 #endif
 
+/*
+ * $BX field caps (hex chars / bytes). The binding constraint is the UPSTREAM
+ * $BX the aggregator/BC logs, which prepends branch_id + timestamp + time_flag
+ * (~49 bytes of fixed overhead) to the three variable fields. To keep that line
+ * within MAX_LINE_LEN, the combined manuf + svc + name hex must stay <=140
+ * (30 + 24 + 16 bytes). svc truncates on whole 2-byte UUID boundaries. Any
+ * truncation raises the $HB err_count as a truncation indicator (the spec's
+ * in-band "low bit" is deferred to the analyzer contract; blebt §4.2).
+ */
+#define BX_MANUF_MAX_BYTES       30   /* <=60 hex */
+#define BX_SVC_MAX_BYTES         24   /* <=48 hex, whole 2-byte UUID tokens */
+#define BX_NAME_EXTRA_MAX_BYTES  16   /* <=32 hex; bytes beyond the 16 in $BL */
+
 /* BC link UART. Pins preliminary, pending PCB layout (open item 8). */
 #ifndef LEAF_UART_PORT
 #define LEAF_UART_PORT 1
@@ -79,7 +92,8 @@ typedef struct {
     uint8_t  manuf[31];
     uint8_t  svc_list_len;
     uint8_t  svc_list[32];     /* concatenated 16-bit UUIDs (LE) for $BX */
-    uint8_t  truncated;        /* 1 → emit $BX */
+    uint8_t  truncated;        /* 1 → more than $BL holds, emit $BX */
+    uint8_t  lost;             /* 1 → data exceeded storage and was dropped */
 } BleAdvEvent;
 
 typedef struct {

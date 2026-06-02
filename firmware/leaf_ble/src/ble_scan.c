@@ -57,32 +57,34 @@ static void parse_adv_data(BleAdvEvent *ev, const uint8_t *data, uint8_t len) {
 
     if (f.name != NULL && f.name_len > 0) {
         uint8_t copy = f.name_len;
-        if (copy > sizeof(ev->name)) copy = sizeof(ev->name);
+        if (copy > sizeof(ev->name)) { copy = sizeof(ev->name); ev->lost = 1; }
         memcpy(ev->name, f.name, copy);
-        ev->name_len = f.name_len;        /* full length (may exceed 16 → $BX) */
+        ev->name_len = copy;              /* stored length (<= buffer) */
     }
 
     if (f.mfg_data != NULL && f.mfg_data_len >= 2) {
         ev->company_id = (int32_t)(f.mfg_data[0] | (f.mfg_data[1] << 8));
         uint8_t copy = f.mfg_data_len;
-        if (copy > sizeof(ev->manuf)) copy = sizeof(ev->manuf);
+        if (copy > sizeof(ev->manuf)) { copy = sizeof(ev->manuf); ev->lost = 1; }
         memcpy(ev->manuf, f.mfg_data, copy);
-        ev->manuf_len = f.mfg_data_len;
+        ev->manuf_len = copy;             /* stored length (<= buffer) */
         if (f.mfg_data_len > 2) ev->truncated = 1;   /* MSD beyond company id */
     }
 
     if (f.num_uuids16 > 0) {
         ev->svc_uuid16 = f.uuids16[0].value;
         uint8_t pos = 0;
-        for (int i = 0; i < f.num_uuids16 && (size_t)(pos + 2) <= sizeof(ev->svc_list); i++) {
+        int i = 0;
+        for (; i < f.num_uuids16 && (size_t)(pos + 2) <= sizeof(ev->svc_list); i++) {
             uint16_t u = f.uuids16[i].value;
             ev->svc_list[pos++] = (uint8_t)(u & 0xFF);
             ev->svc_list[pos++] = (uint8_t)(u >> 8);
         }
         ev->svc_list_len = pos;
+        if (i < f.num_uuids16) ev->lost = 1;             /* UUIDs dropped at storage */
         if (f.num_uuids16 > 1) ev->truncated = 1;
     }
-    if (f.num_uuids128 > 0) ev->truncated = 1;        /* 128-bit UUIDs → $BX */
+    if (f.num_uuids128 > 0) { ev->truncated = 1; ev->lost = 1; }  /* 128-bit dropped */
     if (ev->name_len > 16) ev->truncated = 1;
 }
 

@@ -35,6 +35,19 @@ pio run -e leaf_ble        # platform=espressif32, framework=espidf, board esp32
 framework + toolchain are fetched on first build, which the unrestricted CI
 runner does but a TLS-intercepting sandbox may block.
 
+## `$BX` size bounding
+
+The binding line-length constraint is the **upstream** `$BX` the aggregator/BC
+logs, which prepends `branch_id` + `timestamp` + `time_flag` (~49 B of fixed
+overhead) to the three variable hex fields. So the leaf caps the **combined**
+manufacturer-data + service-UUID-list + name-overflow hex to ≤140 chars —
+manuf ≤30 B, svc ≤24 B truncated on **whole 2-byte UUID boundaries**, name ≤16 B
+beyond the 16 already in `$BL` — which keeps the upstream `$BX` (≤189 B body)
+inside `MAX_LINE_LEN` with a valid checksum. Any truncation (here or at parse-time
+storage) raises the `$HB` `err_count` as the **truncation indicator**; the spec's
+in-band "low bit" marker (`blebt §4.2`) is deferred to the analyzer contract
+rather than invented unilaterally on the wire.
+
 ## Deviations / known limitations (documented, not silent)
 
 - **Channel is reported as `0`.** NimBLE's host API does not surface the primary
