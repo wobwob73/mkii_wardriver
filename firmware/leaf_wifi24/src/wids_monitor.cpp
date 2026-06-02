@@ -54,7 +54,7 @@ static void IRAM_ATTR rx_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
     uint16_t w = g_w_idx;
     uint16_t r = g_r_idx;
     if (next_idx(w) == r) {
-        g_dropped++;
+        g_dropped = g_dropped + 1;   /* not ++: ++ on a volatile is deprecated in C++20 */
         return;
     }
 

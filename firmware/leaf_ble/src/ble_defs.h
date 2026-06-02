@@ -53,15 +53,16 @@
 #define BX_SVC_MAX_BYTES         24   /* <=48 hex, whole 2-byte UUID tokens */
 #define BX_NAME_EXTRA_MAX_BYTES  16   /* <=32 hex; bytes beyond the 16 in $BL */
 
-/* BC link UART. Pins preliminary, pending PCB layout (open item 8). */
+/* BC link UART. Default pins are the XIAO ESP32-S3 header pads D0/D1
+ * (GPIO1 TX / GPIO2 RX); GPIO17/18 are not broken out on that board. */
 #ifndef LEAF_UART_PORT
 #define LEAF_UART_PORT 1
 #endif
 #ifndef LEAF_UART_TX_PIN
-#define LEAF_UART_TX_PIN 17
+#define LEAF_UART_TX_PIN 1
 #endif
 #ifndef LEAF_UART_RX_PIN
-#define LEAF_UART_RX_PIN 18
+#define LEAF_UART_RX_PIN 2
 #endif
 #ifndef LEAF_UART_BAUD
 #define LEAF_UART_BAUD 230400

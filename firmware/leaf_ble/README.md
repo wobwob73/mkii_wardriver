@@ -62,7 +62,7 @@ rather than invented unilaterally on the wire.
   host does not expose the S-rate. (`phy` 1 = 1M, 3 = Coded.)
 - **RPA/NRPA classification** is derived from the BD address MSB per the Core
   spec; RPAs are not resolved in firmware (analyzer-side task, §17 item 1).
-- **GPIO pins are preliminary** (`LEAF_UART_TX_PIN`/`RX_PIN`), pending PCB layout.
+- **BC-link UART pins are the XIAO ESP32-S3 header pads D0/D1** — `LEAF_UART_TX_PIN=1` (GPIO1/D0), `LEAF_UART_RX_PIN=2` (GPIO2/D1). GPIO17/18 are not broken out on the XIAO S3, so D0/D1 (exposed and free) are the chosen pins; still subject to final PCB layout.
 
 These are correctness-of-reporting notes; the framing, dedup, and message
 schemas are spec-conformant and exercised by CI compilation. On-hardware

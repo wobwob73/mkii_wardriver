@@ -339,6 +339,35 @@ Deferred review items (with version targets) are in `HANDOFF.md` §9.
 
 ---
 
+## 7b. Bench bring-up (2026-06-02)
+
+First on-hardware power-up of the light-duty stack. This is the first verification
+beyond CI compile/link + STM32 host-smoke; the trees below were flashed and run on
+real silicon.
+
+- **`agg_lite`** — flashed and running on an RP2040 (Pico, B2). **USB-on-core-0 fix:**
+  `stdio_usb_init()` was being called from `usb_cdc_mirror_init()` on core 1, which
+  split TinyUSB's `tud_task` timer (default alarm pool, core 0) from the servicing
+  IRQ (enabled on the init core), so the CDC device never enumerated — board ran,
+  LED blinked, no `/dev/ttyACM`. Moved to `main()` on core 0 before the core1 launch;
+  `2e8a:000a` now enumerates and `$LA` streams. Constraint recorded in
+  `firmware/agg_lite/README.md`. (SD bench step §13.3 still pending.)
+- **`leaf_wifi24` (ESP32-C3)** — built + flashed (Scan-Hop v1.3).
+- **`leaf_wifi5` (ESP32-C5)** — built + flashed; XIAO C5 is 8 MB, so `platformio.ini`
+  now overrides `board_build/upload.flash_size = 8MB` (the `esp32-c5-devkitc-1` board
+  file assumed 4 MB and left the upper half unpartitioned).
+- **`leaf_ble` (ESP32-S3)** — built + flashed; **BC-link UART remapped to the XIAO S3
+  header pads D0/D1** (`LEAF_UART_TX_PIN=1` / `RX_PIN=2`) since GPIO17/18 are not broken
+  out on that board.
+
+Toolchain determinism: `leaf_wifi24` and `leaf_wifi5` are both pinned to the same
+pioarduino platform tag (`55.03.38-1`) so local and CI builds resolve an identical
+arduino-esp32 core. A C++20 `-Wvolatile` latent issue (`g_dropped++` on a `volatile`)
+was corrected in both leaves' `wids_monitor.cpp` (harmless today, a hard error on a
+future toolchain).
+
+---
+
 ## 8. Recommended next actions (code side)
 
 1. Bench bring-up of `stm32_aggregator` per `stm32_h753_firmware_v1_0.md` §13: flash both

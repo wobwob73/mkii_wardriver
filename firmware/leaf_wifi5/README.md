@@ -5,6 +5,7 @@ Single binary for the 2–3 ESP32-C5 Leaves on the 5 GHz WiFi Branch. Identity a
 ## Target
 
 - **Board:** `esp32-c5-devkitc-1` (or Seeed XIAO ESP32-C5 once the board file is mainlined).
+- **Flash:** the deployment target is the **Seeed XIAO ESP32-C5 (8 MB)**. The `esp32-c5-devkitc-1` board file assumes 4 MB, so `platformio.ini` overrides `board_build.flash_size`/`board_upload.flash_size = 8MB` (`flash_mode = qio`); without that the upper 4 MB is unpartitioned. Replace with a dedicated XIAO C5 board def when one is in the registry.
 - **Framework:** Arduino via the **pioarduino** platform fork — `platform = https://github.com/pioarduino/platform-espressif32.git#55.03.38-1` (see `platformio.ini`). Mainline `espressif32` lags arduino-esp32 by months and does **not** yet carry the `esp32-c5-devkitc-1` board file or the arduino-esp32 v3.x with ESP32-C5 support; the pioarduino fork ships both. If a future mainline `espressif32` release adds C5 support, the same source builds against it with no code changes.
 - **Wire:** 230 400 8N1 to the RP2040 Branch Controller's PIO UART. `ARDUINO_USB_CDC_ON_BOOT=0` so `Serial` is hardware UART0.
 

@@ -46,7 +46,7 @@ leaf_wifi24/
 
 | Flag | Default | Notes |
 |---|---|---|
-| `LEAF_VERSION` | `"1.2.2"` | Firmware build; protocol is `wifi24_leaf_protocol_v1_1` + v1.2 amendment |
+| `LEAF_VERSION` | `"1.3.0"` | Firmware build; protocol is `wifi24_leaf_protocol_v1_1` + v1.2 + v1.3 (Scan-Hop) amendments |
 | `MAX_LINE_LEN` | 200 | Max NMEA-style line length |
 | `HB_INTERVAL_MS` | 10000 | `$HB` cadence |
 | `CONFIG_TIMEOUT_MS` | 10000 | Standalone fallback timeout |
