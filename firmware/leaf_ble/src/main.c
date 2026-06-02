@@ -70,17 +70,28 @@ static void emit_bl(const BleAdvEvent *e) {
 
 static void emit_bx(const BleAdvEvent *e) {
     char bdaddr[18];
-    char manuf_hex[63], svc_hex[67], name_hex[65];
+    char manuf_hex[61];   /* <=30 bytes  -> <=60 hex (blebt §4.2)            */
+    char svc_hex[33];     /* <=16 bytes  -> <=32 hex                          */
+    char name_hex[33];    /* name beyond the 16 already in $BL, <=16 -> <=32  */
     uart_proto_format_mac(e->bdaddr, bdaddr, sizeof(bdaddr));
 
-    if (e->manuf_len == 0) strcpy(manuf_hex, "00");
-    else uart_proto_hex_encode(e->manuf, e->manuf_len > 30 ? 30 : e->manuf_len,
-                               manuf_hex, sizeof(manuf_hex));
-    if (e->svc_list_len == 0) strcpy(svc_hex, "00");
-    else uart_proto_hex_encode(e->svc_list, e->svc_list_len, svc_hex, sizeof(svc_hex));
-    if (e->name_len == 0) strcpy(name_hex, "00");
-    else uart_proto_hex_encode(e->name, e->name_len > 32 ? 32 : e->name_len,
-                               name_hex, sizeof(name_hex));
+    /* Bound every field to its spec size so the framed $BX provably fits in
+     * MAX_LINE_LEN (a longer line would be truncated and break its checksum). */
+    uint8_t mlen = e->manuf_len > 30 ? 30 : e->manuf_len;
+    if (mlen == 0) strcpy(manuf_hex, "00");
+    else uart_proto_hex_encode(e->manuf, mlen, manuf_hex, sizeof(manuf_hex));
+
+    uint8_t slen = e->svc_list_len > 16 ? 16 : e->svc_list_len;
+    if (slen == 0) strcpy(svc_hex, "00");
+    else uart_proto_hex_encode(e->svc_list, slen, svc_hex, sizeof(svc_hex));
+
+    /* name_full_hex carries only the bytes beyond the 16 already in $BL. */
+    if (e->name_len > 16) {
+        uint8_t extra = e->name_len > 32 ? 16 : (uint8_t)(e->name_len - 16);
+        uart_proto_hex_encode(e->name + 16, extra, name_hex, sizeof(name_hex));
+    } else {
+        strcpy(name_hex, "00");
+    }
 
     char body[MAX_LINE_LEN];
     snprintf(body, sizeof(body), "$BX,%s,%s,%s,%s,%s",
