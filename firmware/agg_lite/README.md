@@ -88,3 +88,4 @@ The vendored FatFs `ffconf.h` is used **as shipped** (it already enables
 - **`gps_push_config()` is a no-op**; module pre-configured via u-center (§5, open item 6).
 - **SD has two backends** — the real vendored FatFs-over-SPI (`fatfs`, durable, HW-verification-pending) and a non-durable `stub` (default). See above (§14 item 5 retired).
 - GPIO assignments are preliminary, pending PCB layout (§1, open item 9).
+- **USB CDC must be initialized on core 0** (`stdio_usb_init()` in `main()` before the core1 launch), not in `usb_cdc_mirror_init()` on core 1. The SDK drives `tud_task()` from a repeating timer on the default alarm pool (created on core 0) while the servicing IRQ is enabled on whichever core calls `stdio_usb_init()`; splitting them across cores leaves the device un-enumerated (board runs, LED blinks, no `/dev/ttyACM`). Verified on a Pico (RP2040 B2): `2e8a:000a` enumerates and `$LA` streams.

@@ -8,6 +8,7 @@
 
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
+#include "pico/stdio_usb.h"
 #include "hardware/gpio.h"
 #include "hardware/clocks.h"
 
@@ -44,6 +45,12 @@ int main(void) {
 
     gpio_set_irq_enabled_with_callback(PPS_GPIO, GPIO_IRQ_EDGE_RISE, true,
                                        pps_irq_callback);
+
+    /* USB CDC must be brought up on core 0 (before the core1 launch) so the
+     * tud_task timer (default alarm pool, owned by core 0) and the servicing
+     * IRQ live on the same core; initializing it on core 1 split them and the
+     * device never enumerated. See usb_cdc_mirror.c / README. */
+    stdio_usb_init();
 
     multicore_launch_core1(core1_entry);
 

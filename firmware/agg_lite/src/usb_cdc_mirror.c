@@ -6,8 +6,11 @@
 #include <stdio.h>
 
 void usb_cdc_mirror_init(void) {
-    /* CMake enables stdio over USB (and leaves UART0 for optional debug). */
-    stdio_usb_init();
+    /* USB stdio is initialized on core 0 in main() before the core1 launch,
+       so TinyUSB is serviced by the core that owns the default alarm pool.
+       Initializing it here (core 1) left the tud_task timer on core 0's pool
+       while the servicing IRQ was enabled on core 1 — the device never
+       enumerated. Nothing to do here. */
 }
 
 bool usb_cdc_mirror_connected(void) {
