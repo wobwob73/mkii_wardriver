@@ -29,10 +29,15 @@ static int parse_int(const char *s, int dflt) {
 }
 
 static void switch_to_mode(LeafMode m) {
-    if (m == LEAF_MODE_SCAN) {
-        wids_monitor::stop();
-    } else {
+    if (m == LEAF_MODE_WIDS) {
         wids_monitor::start();
+    } else {
+        /* SCAN and SCANHOP are scan-class (channel-by-channel scanNetworks),
+         * never promiscuous — ensure WIDS is stopped. */
+        wids_monitor::stop();
+        if (m == LEAF_MODE_SCANHOP) {
+            wifi_scan::configure_scanhop(cfg::channel_mask(), cfg::dwell_ms());
+        }
     }
 }
 
@@ -65,7 +70,10 @@ static void handle_ch(char **f, int n) {
     if (strcmp(leaf_id, cfg::id_str()) != 0) {
         return;
     }
-    if (cfg::mode() != LEAF_MODE_WIDS) {
+    /* v1.3 §4.2: $CH now applies to WIDS and Scan-Hop. Parked Scan ignores it
+     * (a parked Leaf has a single channel). mask=0 is invalid (kept current). */
+    LeafMode m = cfg::mode();
+    if (m != LEAF_MODE_WIDS && m != LEAF_MODE_SCANHOP) {
         hb::send_immediate();
         return;
     }
@@ -74,7 +82,11 @@ static void handle_ch(char **f, int n) {
         hb::send_immediate();
         return;
     }
-    wids_monitor::apply_channel_mask(cfg::channel_mask());
+    if (m == LEAF_MODE_WIDS) {
+        wids_monitor::apply_channel_mask(cfg::channel_mask());
+    } else {
+        wifi_scan::apply_scanhop_mask(cfg::channel_mask());
+    }
     hb::send_immediate();
 }
 

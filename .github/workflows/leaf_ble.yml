@@ -1,0 +1,55 @@
+name: leaf_ble
+
+on:
+  push:
+    branches: [main, claude/**]
+    paths:
+      - 'firmware/leaf_ble/**'
+      - '.github/workflows/leaf_ble.yml'
+  pull_request:
+    paths:
+      - 'firmware/leaf_ble/**'
+      - '.github/workflows/leaf_ble.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: leaf_ble-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-leaf-ble-${{ runner.os }}-${{ hashFiles('firmware/leaf_ble/platformio.ini') }}
+          restore-keys: |
+            pio-leaf-ble-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build leaf_ble
+        working-directory: firmware/leaf_ble
+        run: pio run -e leaf_ble
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: leaf_ble-firmware
+          path: |
+            firmware/leaf_ble/.pio/build/leaf_ble/firmware.bin
+            firmware/leaf_ble/.pio/build/leaf_ble/firmware.elf
+          if-no-files-found: warn

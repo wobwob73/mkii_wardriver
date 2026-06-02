@@ -1,0 +1,50 @@
+;
+; PIO UART RX program. 8N1, baud set via clock divider (8 PIO cycles per bit).
+;
+; Adapted from the canonical pico-examples pio_uart_rx program. The autopush
+; threshold is set to 8 bits so each captured byte appears as a single 32-bit
+; word in the RX FIFO with the byte in the LSB.
+;
+
+.program uart_rx
+
+start:
+    wait 0 pin 0        ; stall until start bit detected (falling edge)
+    set x, 7            ; preload bit count - 1
+    nop [10]            ; delay to centre on first data bit
+bitloop:
+    in pins, 1          ; sample one data bit
+    jmp x-- bitloop [6] ; loop, total 8 PIO cycles per bit
+    jmp pin good_stop   ; stop bit must be high
+
+bad_stop:
+    irq 0 rel           ; framing error; could raise an irq
+    wait 1 pin 0        ; wait for line to idle again
+    jmp start
+
+good_stop:
+    push                ; word-aligned push, byte in LSB
+    jmp start
+
+% c-sdk {
+#include "hardware/clocks.h"
+#include "hardware/gpio.h"
+
+static inline void uart_rx_program_init(PIO pio, uint sm, uint offset, uint pin, uint baud) {
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, false);
+    pio_gpio_init(pio, pin);
+    gpio_pull_up(pin);
+
+    pio_sm_config c = uart_rx_program_get_default_config(offset);
+    sm_config_set_in_pins(&c, pin);
+    sm_config_set_jmp_pin(&c, pin);
+    sm_config_set_in_shift(&c, true, true, 8);
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+
+    float div = (float)clock_get_hz(clk_sys) / (8.0f * (float)baud);
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

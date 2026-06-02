@@ -21,12 +21,14 @@ confirmation.
 
 | Tree | Target | Framework / build | Implements | FW version | Build status |
 |---|---|---|---|---|---|
-| `leaf_wifi24` | ESP32-C3 | PlatformIO / Arduino | `wifi24_leaf_protocol_v1_1` + v1.2 amendment | `1.2.1` | CI (`leaf_wifi24.yml`) |
+| `leaf_wifi24` | ESP32-C3 | PlatformIO / Arduino | `wifi24_leaf_protocol_v1_1` + v1.2 + **v1.3 (Scan-Hop)** amendments | `1.3.0` | CI (`leaf_wifi24.yml`) |
 | `branch_wifi24` | RP2040 | pico-sdk + CMake → `.uf2` | `branch_controller_wifi24_v1_0` + v1.1/v1.2 amendments | `1.2.0` | CI (`branch_wifi24.yml`) |
 | `leaf_wifi5` | ESP32-C5 | PlatformIO / **pioarduino** fork | `wifi5_branch_v1_0` §3–§8 | `1.0.2` | CI (`leaf_wifi5.yml`) |
 | `branch_wifi5` | RP2040 | pico-sdk + CMake → `.uf2` | `wifi5_branch_v1_0` (BC side) + BC v1.2 amendment | `1.1.0` | CI (`branch_wifi5.yml`) |
+| `leaf_ble` | ESP32-S3 | PlatformIO / ESP-IDF (NimBLE) | `blebt_branch_v1_0` §7 (BLE Leaf) | `1.0.0` | CI (`leaf_ble.yml`) |
 | `env_sensor_branch` | RP2040 | pico-sdk + CMake → `.uf2` | `env_sensor_branch_v1_0` | `1.0.1` | CI (`env_sensor_branch.yml`) |
 | `stm32_aggregator` | NUCLEO-H753ZI ×2 | bare-metal HAL (CMake + FetchContent CubeH7) + host-smoke | `stm32_h753_firmware_v1_0` | `1.0.2` | CI (`stm32_aggregator.yml`): host-smoke ×2 + on-target ×2 |
+| `agg_lite` | RP2040 | pico-sdk + CMake → `.uf2` | `lite_aggregator_v1_0` | `1.0.0` | CI (`agg_lite.yml`) |
 
 Version strings live in each tree's `*_defs.h` and build flag, and are mirrored in the
 matching spec's build-flag example. Spec **document** versions (the `**Version:**` header
@@ -40,16 +42,24 @@ in each `specs/*.md`) are a separate namespace from firmware build versions.
 |---|---|
 | **Target** | ESP32-C3 (`seeed_xiao_esp32c3`) |
 | **Framework** | Arduino via PlatformIO |
-| **Implements** | `wifi24_leaf_protocol_v1_1.md` **with the v1.2 amendment applied** |
-| **Version** | `1.2.0` (`LEAF_VERSION` in `platformio.ini` + fallback in `include/leaf_defs.h`) |
-| **Status** | Re-derivation from spec; builds in CI |
+| **Implements** | `wifi24_leaf_protocol_v1_1.md` **with the v1.2 and v1.3 (Scan-Hop) amendments applied** |
+| **Version** | `1.3.0` (`LEAF_VERSION` in `platformio.ini` + fallback in `include/leaf_defs.h`) |
+| **Status** | Re-derivation from spec + v1.3 Scan-Hop; builds in CI |
 
-Single binary for all four WiFi 2.4 GHz Leaves (W1–W4). Identity adopted from the first
+Single binary for all WiFi 2.4 GHz Leaf roles. Identity adopted from the first
 `$CF` on the BC UART link. W1/W2/W3 = passive scan (channels 1/6/11); W4 = WIDS
-(promiscuous, channel hopping). The three deviations flagged in the prior code status —
-extended encryption enum (OWE, WPA3-Enterprise), passive scan timing (~200 ms/ch), and
-WIDS ring **drop-newest** on overflow — are now **incorporated into the v1.2 amendment**
-and implemented here, so they are spec-conformant rather than open deviations. See
+(promiscuous, channel hopping); **WH1 = Scan-Hop** (`mode=2`, v1.3): a single Leaf
+round-robins a channel set (default 1057 = 1/6/11, 200 ms/ch), emitting one `$BK`
+per full sweep — added for the light-duty single-box variant (`agg_lite`), which
+covers 2.4 GHz with one Leaf. The three earlier deviations — extended encryption
+enum (OWE, WPA3-Enterprise), passive scan timing (~200 ms/ch), and WIDS ring
+**drop-newest** on overflow — are spec-conformant (folded into the v1.2 amendment).
+
+**v1.3 (this pass):** added `LEAF_MODE_SCANHOP`, `$CF mode=2`, `$CH` now applies to
+Scan-Hop as well as WIDS, the `WH1` leaf-id convention, and a Scan-Hop scan driver
+(`wifi_scan.cpp`: hop-set from mask, per-sweep `$BK`). Per §5.2, the **firmware-wide
+standalone fallback is now Scan-Hop** (mask 1057, 200 ms) — but in the full Branch the
+BC always sends an explicit `$CF` first, so fielded W1–W4 behavior is unchanged. See
 `firmware/leaf_wifi24/README.md` for the per-file layout and the full deviation log.
 
 **Build:** `pio run -e leaf_wifi24` (`-t upload` to flash).
@@ -198,14 +208,81 @@ factory-default + BBR path the code already relies on.
 
 ---
 
+## 6a. `leaf_ble` — BLE-only Leaf firmware (NEW)
+
+| | |
+|---|---|
+| **Target** | ESP32-S3 (`esp32-s3-devkitc-1`) |
+| **Framework** | ESP-IDF via PlatformIO (NimBLE host) |
+| **Implements** | `blebt_branch_v1_0.md` §7 (BLE Leaf side) |
+| **Version** | `1.0.0` (`LEAF_VERSION` in `platformio.ini` + fallback in `src/ble_defs.h`) |
+| **Status** | First build of this Leaf; compiles in CI (`leaf_ble.yml`) |
+
+NimBLE passive observer: extended scan across all three primary adv channels on
+1M + Coded PHYs, per-event TLV parse (flags, name, 16-bit UUIDs, Manufacturer Specific
+Data → Company ID), intra-Leaf 1 s dedup, emits `$BL`/`$BX`/`$BK`/`$HB`. Identity from
+`$CF` (`BLE-1`). Strict listen-only (`passive=1`, no scan requests/connections). The host
+callback only enqueues; the main loop drains and emits (§7.3 critical rule). BT Classic
+(`leaf_bt_classic`) is a separate binary and is **not** built here (light-duty defers it).
+
+**Documented limitations** (in `firmware/leaf_ble/README.md`, not silent): `$BL.channel`
+is `0` (NimBLE host does not surface the per-report primary channel); `$CF`
+`window_ms`/`interval_ms` are advisory under the fixed 100%-duty observer (§7.3); Coded
+PHY S=2/S=8 not distinguished (`phy=3`); RPAs classified but not resolved (analyzer task).
+On-hardware NimBLE Coded-PHY stability is `blebt_branch_v1_0.md` §17 item 5.
+
+**Build:** `pio run -e leaf_ble` (ESP-IDF framework fetched on first build, as `leaf_wifi5`).
+
+---
+
+## 6b. `agg_lite` — Light-Duty Single-Box Aggregator firmware (NEW)
+
+| | |
+|---|---|
+| **Target** | RP2040 (single board, three Leaves, own GPS + SD) |
+| **Framework** | pico-sdk + CMake → `.uf2` (multicore, PIO, DMA, SPI) |
+| **Implements** | `lite_aggregator_v1_0.md` |
+| **Version** | `AGG_LITE_FW_VERSION` `1.0.0` (`include/agg_defs.h` + CMake define + spec §12.2) |
+| **Status** | First build; builds to `.uf2` in CI (`agg_lite.yml`) |
+
+Collapses the Branch-Controller and STM32 mid-tier into one RP2040 for fixed-position
+use. Core 0 runs three PIO UART Leaf links (W24 Scan-Hop `WH1`, W5G scan `W5_1`, BLE
+`BLE-1`) with the BC's line assembly / dispatch / health watchdog. Core 1 owns the GPS
+(UART1 NMEA, F-003 validation), 1PPS + **locally generated `$TM`** (F-004 atomic
+snapshot), three dedup pipelines (WiFi ×2 re-entrant + BLE 5 s/1024), the upstream record
+formatter (`$WA`/`$BD`/`$BX` — byte-identical to the multi-box schemas — plus the new
+`$LA` consolidated heartbeat), and an SD writer draining a 32 KB RAM ring. Optional live
+USB-CDC mirror. Reuses `proto`/`pio_uart`/`pps_time`/`leaf_health`/dedup substantively
+unchanged from `branch_wifi24`; `gps`/`sd_log` ported from the STM32 `App/` layer.
+
+**Not produced in light-duty v1.0** (by design): `$ET`/`$DF` (no WIDS Leaf), `$BC_T`
+(no BT Classic), `$WP` (no promiscuous probe source) — `lite_aggregator_v1_0.md` §6/§7.
+
+**SD backend is a documented PLACEHOLDER (decided this pass — keep stub, integrate later).**
+`src/sd_spi_fatfs.c` is the seam to the vendored FatFs-over-SPI library that §9 lists as
+`[NEW vendored]` and §14 item 5 flags as implementation-phase. The default build links a
+placeholder backend (`AGG_SD_BACKEND=stub`) that brings up SPI0 + card-detect and accounts
+writes but does **not** persist them, so `agg_lite.uf2` compiles in CI and the
+ring/session/state-machine/`$LA` path runs on the CDC mirror. This is the same convention
+as the STM32 PAL host-smoke stub, `gps_push_config()` no-op, and the SGP41 gas-index stub.
+Durable logging = vendor the library into `third_party/pico_fatfs_spi/` and reconfigure
+with `-DAGG_SD_BACKEND=fatfs` (a thin adapter; nothing above `sd_spi_fatfs.h` changes).
+Also: GPS transport is UART1 not I2C (§1, open item 1); `gps_push_config()` is a no-op
+(§5, open item 6). Full deviation log in `firmware/agg_lite/README.md`.
+
+**Build:** `mkdir build && cd build && cmake -G Ninja -DPICO_BOARD=pico .. && ninja agg_lite` → `agg_lite.uf2`.
+
+---
+
 ## 7. Not yet written
 
-The firmware still to be built is the **six protocol branches** outside the current scope,
-each comprising Leaf + Branch-Controller firmware:
+The firmware still to be built is the remaining **protocol branches** outside the current
+scope, each comprising Leaf + Branch-Controller firmware. (The BLE Leaf is now built — see
+§6a — though its RP2040 BC `branch_blebt` and the BT Classic Leaf remain.)
 
 | Branch | STM32 unit / UART | Leaf MCU |
 |---|---|---|
-| BLE / BT | #1 | ESP32-S3 |
+| BLE / BT (RP2040 BC `branch_blebt` + `leaf_bt_classic`; `leaf_ble` done) | #1 | ESP32-S3 |
 | 802.15.4 (Thread/Zigbee/Matter) | #1 | ESP32-H2 |
 | Meshtastic / Meshcore (LoRa) | #2 | LoRa modules |
 | VHF ISM (315/433) | #2 | Arduino Nano + FSK RX |

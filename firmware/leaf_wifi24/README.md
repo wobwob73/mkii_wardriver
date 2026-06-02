@@ -1,6 +1,6 @@
 # `leaf_wifi24` — 2.4 GHz WiFi Branch Leaf Firmware
 
-Single binary for all four WiFi 2.4 GHz Leaves (W1–W4). Identity is adopted from the first `$CF` received on the Branch Controller UART link. Implements `wifi24_leaf_protocol_v1_1.md` with the v1.2 amendment applied (encryption enum 0–10 including OWE and WPA3-Enterprise, passive scan timing, WIDS ring drop-newest).
+Single binary for all WiFi 2.4 GHz Leaf roles. Identity is adopted from the first `$CF` received on the Branch Controller UART link. Implements `wifi24_leaf_protocol_v1_1.md` with the v1.2 and **v1.3 (Scan-Hop)** amendments applied (encryption enum 0–10 including OWE and WPA3-Enterprise, passive scan timing, WIDS ring drop-newest, and the Scan-Hop role below).
 
 ## Target
 
@@ -12,6 +12,7 @@ Single binary for all four WiFi 2.4 GHz Leaves (W1–W4). Identity is adopted fr
 
 - `W1`, `W2`, `W3` — scan Leaves, park on channels 1 / 6 / 11. Passive scan with `~200 ms` per channel; emit `$AP` per detected AP and a closing `$BK`.
 - `W4` — WIDS Leaf, promiscuous mode hopping through all 14 channels with a 100 ms dwell. Emits `$BC` (beacons, deduplicated within a cycle), `$DE` (deauth/disassoc), `$PR` (probe requests).
+- `WH1` — **Scan-Hop Leaf (`mode=2`, v1.3)**. A single passive-scan Leaf that round-robins a channel set instead of parking. Default hop set is `1057` (1/6/11) at 200 ms/ch (`$CH` overrides the mask, e.g. `2047` for all of 1–11); emits the **same** records as Scan (`$AP`, `$BK`, `$HB`) but with **one `$BK` per full sweep** (count/duration aggregated over the set). Added for the light-duty single-box aggregator (`agg_lite`), which covers 2.4 GHz with one Leaf. WIDS is not available in a single Scan-Hop Leaf (`lite_aggregator_v1_0.md` §6.1). Per v1.3 §5.2 the **standalone fallback (no `$CF` in 10 s) is now Scan-Hop** under `WH?` — overridden by the BC's explicit boot `$CF` in the full Branch, so W1–W4 behavior is unchanged in the field.
 
 ## Build / flash
 

@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #ifndef LEAF_VERSION
-#define LEAF_VERSION "1.2.2"
+#define LEAF_VERSION "1.3.0"
 #endif
 
 #ifndef MAX_LINE_LEN
@@ -40,9 +40,18 @@
 #endif
 
 enum LeafMode : uint8_t {
-    LEAF_MODE_SCAN = 0,
-    LEAF_MODE_WIDS = 1,
+    LEAF_MODE_SCAN    = 0,
+    LEAF_MODE_WIDS    = 1,
+    LEAF_MODE_SCANHOP = 2,   /* v1.3: passive sweep of a channel set (WH1) */
 };
+
+/* Default Scan-Hop hop set: channels 1/6/11 (bits 0/5/10). v1.3 §4.2/§9. */
+#ifndef SCANHOP_DEFAULT_MASK
+#define SCANHOP_DEFAULT_MASK 1057
+#endif
+#ifndef SCANHOP_DEFAULT_DWELL_MS
+#define SCANHOP_DEFAULT_DWELL_MS 200
+#endif
 
 enum LeafEncryption : uint8_t {
     LE_OPEN          = 0,
@@ -91,6 +100,13 @@ struct LeafConfig {
 inline bool valid_leaf_id(const char *s) {
     if (!s) return false;
     if (s[0] != 'W') return false;
+    /* Scan-Hop convention: WH1 (and WH2.. if ever fielded). v1.3. */
+    if (s[1] == 'H') {
+        if (s[2] < '1' || s[2] > '9') return false;
+        if (s[3] != '\0') return false;
+        return true;
+    }
+    /* Scan / WIDS: W1..W4. */
     if (s[1] < '1' || s[1] > '4') return false;
     if (s[2] != '\0') return false;
     return true;

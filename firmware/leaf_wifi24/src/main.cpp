@@ -62,6 +62,8 @@ void loop() {
     if (cfg::adopted()) {
         if (cfg::mode() == LEAF_MODE_SCAN) {
             wifi_scan::process();
+        } else if (cfg::mode() == LEAF_MODE_SCANHOP) {
+            wifi_scan::process_scanhop();
         } else {
             wids_monitor::process();
         }
