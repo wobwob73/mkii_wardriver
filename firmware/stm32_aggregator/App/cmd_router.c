@@ -40,8 +40,16 @@ int cmd_router_target_for_leaf(const char *leaf_id) {
 
 bool cmd_router_handle_usb_line(const char *line, size_t len) {
     if (!line || len < 5) return false;
-    char copy[MAX_LINE_LEN + 1];
     if (len > MAX_LINE_LEN) return false;
+
+    /* Validate the outer framing first. cmd_router is the only place an
+     * untrusted host-supplied USB CDC line is interpreted, so reject anything
+     * that doesn't pass the strict '$...*XX' checksum check before we look
+     * for a routing target. With the v1.2 $RC hex-encoded inner there are
+     * no collision concerns between outer and inner '*' or ','. */
+    if (!proto_validate_line(line, len)) return false;
+
+    char copy[MAX_LINE_LEN + 1];
     memcpy(copy, line, len);
     copy[len] = '\0';
 
@@ -58,18 +66,17 @@ bool cmd_router_handle_usb_line(const char *line, size_t len) {
 
     const char *type = fields[0];
     if (strcmp(type, "RC") == 0) {
+        /* $RC,<target>,<hex>*<outer_cksum> — opaque to the STM32 beyond the
+         * target-id field. The Branch decodes the hex inner, validates the
+         * inner checksum independently, and relays to the leaf. */
         if (n < 3) return false;
         int target = cmd_router_target_for_leaf(fields[1]);
         if (target < 0) return false;
-        size_t pre_star = (size_t)(star - copy);
         char relayed[MAX_LINE_LEN + 2];
         if (len + 2 > sizeof(relayed)) return false;
         memcpy(relayed, line, len);
-        if (len < sizeof(relayed) - 1) {
-            relayed[len]     = '\n';
-            relayed[len + 1] = '\0';
-        }
-        (void)pre_star;
+        relayed[len]     = '\n';
+        relayed[len + 1] = '\0';
         pal_branch_tx_write_str((uint8_t)target, relayed);
         return true;
     } else if (strcmp(type, "RQ") == 0) {

@@ -35,12 +35,8 @@ static inline void uart_tx_program_init(PIO pio, uint sm, uint offset, uint pin,
     pio_sm_set_enabled(pio, sm, true);
 }
 
-static inline void uart_tx_program_retarget_pin(PIO pio, uint sm, uint pin) {
-    pio_sm_set_enabled(pio, sm, false);
-    pio_sm_set_pins_with_mask(pio, sm, (1u << pin), (1u << pin));
-    pio_sm_set_pindirs_with_mask(pio, sm, (1u << pin), (1u << pin));
-    pio_gpio_init(pio, pin);
-    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
-    pio_sm_set_enabled(pio, sm, true);
-}
+/* Pin retargeting lives in pio_uart.c (uart_tx_retarget_pin). The earlier
+ * implementation here only re-pinned the GPIO and never updated the state
+ * machine's PINCTRL OUT/SIDESET base, so all bytes still left on the
+ * originally configured pin. Removed to prevent reuse. */
 %}

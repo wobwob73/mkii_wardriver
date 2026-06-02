@@ -60,6 +60,17 @@ static int32_t parse_decimal_e7(const char *s) {
     return sign * e7;
 }
 
+static int decode_decimal_digit(char c) {
+    return (c >= '0' && c <= '9') ? (c - '0') : -1;
+}
+
+static int decode_two_digits(const char *s) {
+    int hi = decode_decimal_digit(s[0]);
+    int lo = decode_decimal_digit(s[1]);
+    if (hi < 0 || lo < 0) return -1;
+    return hi * 10 + lo;
+}
+
 static void process_rmc(char **f, int n) {
     if (n < 12) return;
     if (!f[2] || f[2][0] != 'A') {
@@ -71,12 +82,18 @@ static void process_rmc(char **f, int n) {
     const char *tstr = f[1];
     const char *dstr = f[9];
     if (tstr && strlen(tstr) >= 6 && dstr && strlen(dstr) >= 6) {
-        int hh = (tstr[0] - '0') * 10 + (tstr[1] - '0');
-        int mm = (tstr[2] - '0') * 10 + (tstr[3] - '0');
-        int ss = (tstr[4] - '0') * 10 + (tstr[5] - '0');
-        int dd = (dstr[0] - '0') * 10 + (dstr[1] - '0');
-        int mo = (dstr[2] - '0') * 10 + (dstr[3] - '0');
-        int yy = (dstr[4] - '0') * 10 + (dstr[5] - '0');
+        int hh = decode_two_digits(tstr + 0);
+        int mm = decode_two_digits(tstr + 2);
+        int ss = decode_two_digits(tstr + 4);
+        int dd = decode_two_digits(dstr + 0);
+        int mo = decode_two_digits(dstr + 2);
+        int yy = decode_two_digits(dstr + 4);
+        /* Reject malformed digits and out-of-range values. A corrupted I2C
+         * byte that flipped a digit must not propagate into the timebase. */
+        if (hh < 0 || mm < 0 || ss < 0 || dd < 0 || mo < 0 || yy < 0) return;
+        if (hh > 23 || mm > 59 || ss > 60) return;   /* 60 allowed for leap second */
+        if (mo < 1 || mo > 12) return;
+        if (dd < 1 || dd > 31) return;
         int year = 2000 + yy;
 
         static const int days_per_month[] = { 31, 28, 31, 30, 31, 30,
@@ -117,9 +134,15 @@ static void process_gga(char **f, int n) {
     if (n < 10) return;
     if (f[6] && f[6][0]) {
         int fix = atoi(f[6]);
+        if (fix < 0 || fix > 9) return;        /* NMEA fix-quality is 0..8 */
         g_state.fix_ok = (fix > 0);
     }
-    if (f[7] && f[7][0]) g_state.sat_count = (uint8_t)atoi(f[7]);
+    if (f[7] && f[7][0]) {
+        int sats = atoi(f[7]);
+        if (sats < 0) sats = 0;
+        if (sats > 64) sats = 64;              /* multi-constellation upper bound */
+        g_state.sat_count = (uint8_t)sats;
+    }
     if (f[8] && f[8][0]) {
         double hdop = atof(f[8]);
         if (hdop < 0) hdop = 0;
@@ -134,9 +157,40 @@ static void process_gga(char **f, int n) {
     }
 }
 
+static int nmea_hex_to_int(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+    if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+    return -1;
+}
+
+/* NMEA-0183 checksum: XOR of all bytes between '$' (exclusive) and '*'
+ * (exclusive), printed as two uppercase hex digits after '*'. A corrupted
+ * I2C byte stream MUST NOT be allowed to update the timebase, so we reject
+ * the sentence unless the checksum is exactly '*HH' at end-of-line and
+ * matches. The PPS-driven timing path depends on this. */
+static bool nmea_validate_checksum(const char *line, size_t len) {
+    if (len < 8) return false;       /* "$xx,*HH" is the minimum shape */
+    if (line[0] != '$') return false;
+    const char *star = NULL;
+    for (size_t i = 1; i < len; i++) {
+        if (line[i] == '*') { star = line + i; break; }
+    }
+    if (!star) return false;
+    /* '*HH' must be the last three bytes of the line. */
+    if ((size_t)((star + 3) - line) != len) return false;
+    int hi = nmea_hex_to_int(star[1]);
+    int lo = nmea_hex_to_int(star[2]);
+    if (hi < 0 || lo < 0) return false;
+    uint8_t expected = (uint8_t)((hi << 4) | lo);
+    uint8_t actual = 0;
+    for (const char *p = line + 1; p < star; p++) actual ^= (uint8_t)*p;
+    return expected == actual;
+}
+
 static void process_nmea_line(char *line, size_t len) {
-    if (len < 6) return;
-    if (line[0] != '$') return;
+    if (!nmea_validate_checksum(line, len)) return;
+    /* Checksum passed; safe to parse. Truncate at '*' for field walking. */
     char *star = NULL;
     for (size_t i = 1; i < len; i++) {
         if (line[i] == '*') { star = line + i; break; }

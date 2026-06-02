@@ -24,13 +24,36 @@ static FATFS        g_fatfs;
 static bool         g_fatfs_mounted = false;
 
 uint64_t pal_time_us_64(void) {
-    uint32_t hi1, hi2, lo;
-    do {
-        hi1 = g_tim2_overflow_hi;
-        lo  = __HAL_TIM_GET_COUNTER(&htim2);
-        hi2 = g_tim2_overflow_hi;
-    } while (hi1 != hi2);
-    return ((uint64_t)hi1 << 32) | (uint64_t)lo;
+    /*
+     * 64-bit microsecond timestamp = (g_tim2_overflow_hi << 32) | TIM2->CNT.
+     *
+     * The naive hi/lo/hi double-read leaves a small window: the hardware
+     * counter wraps to a small value (UIF asserts), but the overflow ISR
+     * hasn't yet incremented g_tim2_overflow_hi. In that window hi1 == hi2,
+     * but lo belongs to the next 32-bit epoch — the function returns a
+     * timestamp ~71.6 minutes in the past.
+     *
+     * Fix: also sample TIM2->SR's UIF flag. If UIF is asserted while we
+     * read AND the counter is in its low half (i.e., we're past the wrap),
+     * fold the carry in by hand. The (lo < 0x80000000) gate keeps us from
+     * folding a UIF that was set by an ISR that has already run but whose
+     * cleared write hasn't propagated — in that case the counter would
+     * still be in the high half from the previous epoch.
+     */
+    while (1) {
+        uint32_t hi = g_tim2_overflow_hi;
+        uint32_t lo = __HAL_TIM_GET_COUNTER(&htim2);
+        bool overflow_pending = __HAL_TIM_GET_FLAG(&htim2, TIM_FLAG_UPDATE) != RESET;
+        uint32_t hi2 = g_tim2_overflow_hi;
+        if (hi != hi2) {
+            /* The ISR fired between our reads — retry against the new hi. */
+            continue;
+        }
+        if (overflow_pending && lo < 0x80000000u) {
+            hi += 1;
+        }
+        return ((uint64_t)hi << 32) | (uint64_t)lo;
+    }
 }
 
 uint32_t pal_time_ms(void) {

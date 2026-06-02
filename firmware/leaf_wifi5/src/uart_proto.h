@@ -14,6 +14,10 @@ bool send_line(const char *line);
 
 bool send_framed(const char *body);
 
+/* Cumulative TX frames dropped because the bounded 50 ms send_line deadline
+ * elapsed before the line could be fully written. Surfaced via $HB. */
+uint32_t tx_drop_count();
+
 class LineReceiver {
 public:
     LineReceiver();

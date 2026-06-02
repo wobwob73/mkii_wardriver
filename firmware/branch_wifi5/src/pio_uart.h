@@ -22,3 +22,8 @@ int pio_uart_rx_read(pio_uart_rx_t *u, uint8_t *out, size_t cap);
 void pio_uart_tx_send(uint pin, const uint8_t *bytes, size_t n);
 
 void pio_uart_tx_send_line(uint pin, const char *line);
+
+/* Cumulative count of PIO TX retarget self-check failures. A non-zero value
+ * means the SM's PINCTRL did not end up pointing at the requested pin and
+ * the offending send was dropped. Surface in $BS for field debugging. */
+uint32_t pio_uart_tx_retarget_error_count(void);

@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 #define BRANCH_ID                 "W24"
-#define BC_FW_VERSION             "1.1.0"
+#define BC_FW_VERSION             "1.2.0"
 
 #define MAX_LINE_LEN              200
 #define UPSTREAM_BAUD             230400

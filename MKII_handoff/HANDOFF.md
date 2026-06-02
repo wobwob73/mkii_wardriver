@@ -1,6 +1,6 @@
 # MKII — Multi-Spectrum RF Survey Platform — Handoff Package
 
-**Compiled:** 2026-06-01
+**Compiled:** 2026-06-02
 **Purpose:** Single-document handoff covering project goals, system architecture,
 current state, completed work, outstanding work, repository layout, and a precise
 inventory of produced code. Intended to bring a code-side contributor up to speed with
@@ -300,7 +300,70 @@ written and building in CI; the work ahead is bench bring-up plus the six unbuil
 
 ## 9. ⚠ Version / Consistency Issues to Resolve
 
-### Resolved (this pass, 2026-06-01)
+### Resolved (review-driven hardening pass, 2026-06-02)
+
+Triggered by the external code-analysis report (`mkii_code_analysis_report.md`,
+2026-06-01). All confirmed defects in the Critical / High tiers are addressed in
+written firmware; the deferred items are recorded with version targets below.
+
+10. **PIO TX retarget (F-001).** The single shared TX state machine on both
+    BC trees now updates its `PINCTRL.OUT_BASE` / `SIDESET_BASE` during retarget
+    instead of only re-pinning the GPIO. Drain + 80 µs settle + reconfig + JMP
+    back to program origin + read-back self-check. Without this fix every
+    downstream byte left on the first leaf's TX pin and W2..W4 / W5_2..W5_3
+    never received their `$CF`. branch_wifi24 → 1.2.0, branch_wifi5 → 1.1.0.
+11. **`$RC` relay (F-002).** Wire format redefined to a hex-encoded inner:
+    `$RC,<target>,<hex>*<outer_cksum>`. The plaintext-nested form was
+    unparseable on the wire. New BC spec amendment:
+    `branch_controller_wifi24_v1_2_amendment.md`. STM32 routes the outer line
+    after strict outer validation; BC decodes hex, validates inner, relays.
+12. **GPS NMEA validation (F-003).** stm32 firmware now rejects sentences that
+    fail NMEA checksum or contain out-of-range time/date fields before any
+    update of the timebase. A bad I2C byte can no longer poison `$TM`.
+13. **Atomic PPS snapshots (F-004).** All four trees now read time/state via
+    a `pps_time_snapshot()` accessor with a hardware spinlock (RP2040) or a
+    PRIMASK-protected critical section (STM32). 64-bit `pps_timer_us` cannot
+    tear; apply/ISR cannot interleave.
+14. **TIM2 64-bit overflow race (F-005).** `pal_time_us_64()` now consults
+    the TIM2 UIF flag during the read and folds the carry in software when an
+    overflow has fired but the ISR hasn't yet bumped the high half — closes a
+    ~71-min backward-jump window near PPS edges.
+15. **Strict outer framing (F-006).** All proto consumers now require `*XX`
+    at the exact end of the line; line receivers strip a trailing CR.
+16. **WIDS correctness (F-007 partial).** `ET_ENC_MISMATCH` now emitted when
+    SSID matches but encryption differs; single-radio alerts no longer
+    populate `known_bssid` with a copy of `rogue_bssid` (analyzer can now tell
+    "no second radio identified" from a future two-radio case). Full
+    SSID-keyed evil-twin redesign is deferred.
+17. **Bounded leaf UART TX (F-008).** Replaced the unbounded
+    "spin until `availableForWrite() ≥ n`" with chunked writes + 50 ms
+    deadline + drop counter in `$HB`.
+
+### Deferred review items (open-items registers; v1.1+ targets)
+
+Tracked but not implemented in this pass; recorded so they don't get lost:
+
+- **F-007 full evil-twin redesign** (SSID-keyed tracking, security downgrade
+  detection). Target: BC v1.2+. W4 WIDS bench bring-up is the gating event.
+- **F-009** invalid hex SSID payloads collapsing to "empty SSID" rather than
+  being rejected. Target: BC v1.2+.
+- **F-012** ignored init/runtime return codes (`pio_uart_subsys_init`,
+  `HAL_UART_Receive_DMA`, `pal_sd_open_append`). Target: per-tree v1.1+.
+- **F-013** SD heartbeat reports OK if mounted even when no log files opened.
+  Target: STM32 v1.1.
+- **F-016** numeric parser hardening (strict end-of-conversion checks, range
+  limits on channel / encryption / sat-count fields). Target: cross-tree
+  v1.1.
+- **F-014** STM32 `gps_push_config()` no-op (u-center pre-config required);
+  already documented (`stm32_h753_firmware_v1_0.md` §14 item 2).
+- **F-015** SGP41 baseline-only gas-index stub; already documented
+  (`env_sensor_branch_v1_0.md` §14 item 9).
+- **F-017–F-023** operational hardening (CI/toolchain pin SHAs, USB CDC DTR
+  gating + RX-overflow counter, W5 scanner first-pass skip, dispatch
+  unknown-prefix discard, D-cache placement if later enabled, USB VID/PID
+  finalization). Target: pre-production cleanup.
+
+### Earlier resolutions (2026-06-01 stabilization pass)
 
 1. **STM32 board (FK743 → NUCLEO-H753ZI).** The FK743M2-IIT6 references in
    `system_plan_v2.md` and `system_plan_v2_1_amendment.md` `stm32_units` blocks now carry

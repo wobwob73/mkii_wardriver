@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 #define BRANCH_ID                 "SEN"
-#define SENSOR_FW_VERSION         "1.0.0"
+#define SENSOR_FW_VERSION         "1.0.1"
 
 #define MAX_LINE_LEN              200
 #define UPSTREAM_BAUD             230400

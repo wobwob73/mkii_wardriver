@@ -1,6 +1,6 @@
 # MKII — Code Status & Firmware Inventory
 
-**Compiled:** 2026-06-01
+**Compiled:** 2026-06-02
 **Scope:** Every firmware tree produced for MKII, where it lives in this repo, how it
 builds, its version, and the deliberate, documented deviations from the spec baked into
 each. All six trees are **in this repository** under `firmware/`; build status rests on
@@ -21,12 +21,12 @@ confirmation.
 
 | Tree | Target | Framework / build | Implements | FW version | Build status |
 |---|---|---|---|---|---|
-| `leaf_wifi24` | ESP32-C3 | PlatformIO / Arduino | `wifi24_leaf_protocol_v1_1` + v1.2 amendment | `1.2.0` | CI (`leaf_wifi24.yml`) |
-| `branch_wifi24` | RP2040 | pico-sdk + CMake → `.uf2` | `branch_controller_wifi24_v1_0` + v1.1 amendment | `1.1.0` | CI (`branch_wifi24.yml`) |
-| `leaf_wifi5` | ESP32-C5 | PlatformIO / **pioarduino** fork | `wifi5_branch_v1_0` §3–§8 | `1.0.1` | CI (`leaf_wifi5.yml`) |
-| `branch_wifi5` | RP2040 | pico-sdk + CMake → `.uf2` | `wifi5_branch_v1_0` (BC side) | `1.0.0` | CI (`branch_wifi5.yml`) |
-| `env_sensor_branch` | RP2040 | pico-sdk + CMake → `.uf2` | `env_sensor_branch_v1_0` | `1.0.0` | CI (`env_sensor_branch.yml`) |
-| `stm32_aggregator` | NUCLEO-H753ZI ×2 | bare-metal HAL (CMake + FetchContent CubeH7) + host-smoke | `stm32_h753_firmware_v1_0` | `1.0.1` | CI (`stm32_aggregator.yml`): host-smoke ×2 + on-target ×2 |
+| `leaf_wifi24` | ESP32-C3 | PlatformIO / Arduino | `wifi24_leaf_protocol_v1_1` + v1.2 amendment | `1.2.1` | CI (`leaf_wifi24.yml`) |
+| `branch_wifi24` | RP2040 | pico-sdk + CMake → `.uf2` | `branch_controller_wifi24_v1_0` + v1.1/v1.2 amendments | `1.2.0` | CI (`branch_wifi24.yml`) |
+| `leaf_wifi5` | ESP32-C5 | PlatformIO / **pioarduino** fork | `wifi5_branch_v1_0` §3–§8 | `1.0.2` | CI (`leaf_wifi5.yml`) |
+| `branch_wifi5` | RP2040 | pico-sdk + CMake → `.uf2` | `wifi5_branch_v1_0` (BC side) + BC v1.2 amendment | `1.1.0` | CI (`branch_wifi5.yml`) |
+| `env_sensor_branch` | RP2040 | pico-sdk + CMake → `.uf2` | `env_sensor_branch_v1_0` | `1.0.1` | CI (`env_sensor_branch.yml`) |
+| `stm32_aggregator` | NUCLEO-H753ZI ×2 | bare-metal HAL (CMake + FetchContent CubeH7) + host-smoke | `stm32_h753_firmware_v1_0` | `1.0.2` | CI (`stm32_aggregator.yml`): host-smoke ×2 + on-target ×2 |
 
 Version strings live in each tree's `*_defs.h` and build flag, and are mirrored in the
 matching spec's build-flag example. Spec **document** versions (the `**Version:**` header
@@ -217,6 +217,38 @@ Also unbuilt (non-firmware): the **Analyzer (Root)** application (fork SSA, port
 USB-CDC ingest, rtl_433 sidecar + GPS-tag wrapper, trunk-recorder, Whisper pipeline). The
 SSA (v5.12.0) and Wardriving Analyzer (v4.8.0) codebases are external prior work, referenced
 as the analyzer's starting point, not part of this repo.
+
+---
+
+## 7a. Review-driven hardening (2026-06-02)
+
+An external code review (`mkii_code_analysis_report.md`, 2026-06-01) found a
+set of correctness defects that CI cannot catch — they affect whether
+hardware actually does what the source claims. All confirmed Critical / High
+findings are addressed in this pass; the per-tree READMEs and
+`branch_controller_wifi24_v1_2_amendment.md` describe the changes:
+
+- **F-001 (Critical):** PIO TX retarget now updates `PINCTRL.OUT_BASE` /
+  `SIDESET_BASE` and self-checks. Without this, W2..W4 / W5_2..W5_3 never
+  received their `$CF`. **Hardware-only verification.**
+- **F-002 (Critical):** `$RC` relay wire format is now `$RC,<target>,<hex>*XX`
+  — the plaintext-nested form was unparseable. Implementation + spec in
+  `branch_controller_wifi24_v1_2_amendment.md` §8.2.
+- **F-003:** STM32 GPS now validates NMEA checksums + ranges before any
+  timebase update.
+- **F-004:** PPS state on all four trees now read via atomic snapshot
+  accessor (RP2040: hardware spinlock; STM32: PRIMASK).
+- **F-005:** STM32 `pal_time_us_64()` is now UIF-aware, closing the
+  pre-ISR overflow window. **Hardware-only verification of behavior.**
+- **F-006:** All proto validators now require `*XX` to be exactly the last
+  three bytes; line receivers strip trailing CR. Cross-tree.
+- **F-007 (partial):** WIDS correctness fix — `ET_ENC_MISMATCH` now emitted,
+  single-radio alerts no longer fake a known-vs-rogue identity. Full
+  SSID-keyed evil-twin detector deferred.
+- **F-008:** Leaf `send_line()` is now bounded (chunked writes, 50 ms
+  deadline, drop counter).
+
+Deferred review items (with version targets) are in `HANDOFF.md` §9.
 
 ---
 

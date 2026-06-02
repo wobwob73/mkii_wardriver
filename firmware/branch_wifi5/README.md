@@ -2,7 +2,7 @@
 
 RP2040 firmware for the 5 GHz WiFi Branch Controller. Dual-core, aggregates 2–3 ESP32-C5 Leaves (`W5_1`, `W5_2`, `W5_3`) via PIO UART, deduplicates AP detections in 500 ms windows with tombstone reclaim, runs WIDS analysis (evil twin, deauth flood), and streams formatted records upstream to STM32 #1 USART2 via hardware UART0. Branch ID is `W5G`.
 
-Implements `wifi5_branch_v1_0.md` §8–§13. The dual-core architecture, SPSC queue pattern (`__dmb()` barriers, no spinlocks), tombstone dedup, and PIO0=RX/PIO1=TX with OUT-pin remap are inherited from `branch_controller_wifi24_v1_0.md` + v1.1 amendment.
+Implements `wifi5_branch_v1_0.md` §8–§13. The dual-core architecture, SPSC queue pattern (`__dmb()` barriers, no spinlocks), tombstone dedup, and PIO0=RX/PIO1=TX with OUT-pin remap are inherited from `branch_controller_wifi24_v1_0.md` with v1.1 and v1.2 amendments (v1.2: `$RC` hex-encoded inner, PIO TX SM properly retargeted via `PINCTRL` rewrite with self-check, atomic PPS snapshots, tightened proto framing).
 
 ## Target
 

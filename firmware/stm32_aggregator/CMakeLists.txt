@@ -203,7 +203,7 @@ target_include_directories(${TARGET_NAME} PRIVATE
 target_compile_definitions(${TARGET_NAME} PRIVATE
     USE_HAL_DRIVER
     STM32H753xx
-    MKII_FW_VERSION="1.0.1"
+    MKII_FW_VERSION="1.0.2"
     MKII_STM32_UNIT=${MKII_STM32_UNIT}
 )
 

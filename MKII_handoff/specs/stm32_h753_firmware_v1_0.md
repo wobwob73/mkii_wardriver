@@ -279,7 +279,7 @@ USB CDC OUT is parsed with the same `$..*XX\n` line assembler. Recognized lines:
 
 ## 7. Downstream Command Routing — `$RC`
 
-The Trunk sends `$RC,<leaf_id>,<inner_cmd>` for end-to-end Trunk-to-Leaf relay. The STM32 inspects only the `leaf_id` prefix to choose a Branch UART:
+The Trunk sends `$RC,<leaf_id>,<hex>*<outer_cksum>` for end-to-end Trunk-to-Leaf relay, where `<hex>` is the ASCII-hex-encoded inner framed command (see `branch_controller_wifi24_v1_2_amendment.md` §8.2). The STM32 inspects only the `leaf_id` field — the hex inner is opaque to it. The STM32 first validates the outer line's checksum strictly (`*XX` must end the line), then chooses a Branch UART by `leaf_id`:
 
 | `leaf_id` prefix | Branch UART |
 |---|---|
@@ -294,9 +294,9 @@ The Trunk sends `$RC,<leaf_id>,<inner_cmd>` for end-to-end Trunk-to-Leaf relay. 
 | `FPV_*` | FPV BC (UART5 on STM32 #2) |
 | (unknown) | Drop, increment `relay_unknown_leaf`, log to debug |
 
-The STM32 does **not** validate the inner command's checksum — that responsibility is the BC's (per BC spec §8.2 + v1.1 amendment). The STM32 acts as a layer-3-style router on `leaf_id`.
+The STM32 does **not** hex-decode or validate the inner command's checksum — that responsibility is the BC's (per BC spec §8.2 + v1.1/v1.2 amendments). The STM32 validates only the outer `$RC,...*XX` line, then acts as a layer-3-style router on `leaf_id`.
 
-The STM32 forwards the entire received `$RC,...` line verbatim onto the target Branch UART. The BC then re-validates and forwards the inner command to the Leaf.
+The STM32 forwards the entire received `$RC,...` line (with the hex inner intact) verbatim onto the target Branch UART. The BC then strictly validates the outer line again, hex-decodes the inner, re-validates the inner's own checksum, and forwards the decoded inner to the Leaf.
 
 ---
 
@@ -464,7 +464,7 @@ Sustained USB CDC bandwidth target: ~30 KB/s peak (2 × the per-unit estimate in
 target_compile_definitions(stm32_aggregator PRIVATE
     USE_HAL_DRIVER
     STM32H753xx
-    MKII_FW_VERSION="1.0.1"                # firmware build; bumped for the 480 MHz clock-tree fix
+    MKII_FW_VERSION="1.0.2"                # firmware build; 480 MHz clock-tree fix (1.0.1), PPS/GPS/TIM2/$RC hardening (1.0.2)
     MKII_STM32_UNIT=${MKII_STM32_UNIT}     # 1 or 2, passed at configure time
 )
 ```

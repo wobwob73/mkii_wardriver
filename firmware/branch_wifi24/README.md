@@ -2,7 +2,7 @@
 
 RP2040 firmware for the 2.4 GHz WiFi Branch Controller. Dual-core. Aggregates four ESP32-C3 Leaves (W1–W4) via PIO UART, deduplicates AP detections in 500 ms windows, runs WIDS analysis (evil twin, deauth flood), and streams formatted records upstream to STM32 #1 USART1 via hardware UART0.
 
-Implements `branch_controller_wifi24_v1_0.md` with the v1.1 amendment applied (true SPSC with `__dmb()` barriers, PIO0=RX/PIO1=TX split, tombstone-based dedup reclaim, `$RC` inner-checksum-on-relay, `enc` field range 0–10).
+Implements `branch_controller_wifi24_v1_0.md` with v1.1 and v1.2 amendments applied (v1.1: true SPSC with `__dmb()` barriers, PIO0=RX/PIO1=TX split, tombstone-based dedup reclaim, `enc` field range 0–10; v1.2: `$RC` inner command is **hex-encoded** to remove `*`/`,` collisions with outer framing, PIO TX SM is properly retargeted via `PINCTRL` rewrite with self-check, PPS time state is read via an atomic snapshot, proto checksum validator rejects trailing data).
 
 ## Target
 

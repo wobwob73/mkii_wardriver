@@ -62,19 +62,28 @@ static void process_stm32_line(char *line, size_t len) {
                              detection_q_overflow_count() +
                              wids_q_overflow_count());
     } else if (strcmp(type, "RC") == 0) {
+        /*
+         * $RC wire format (v1.2 amendment): $RC,<target>,<hex>*<outer_cksum>
+         * where <hex> is the ASCII-hex of the full inner framed line including
+         * its own '$' and '*XX' (NOT including a trailing '\n'). Hex encoding
+         * removes all '*' / ',' collisions with the outer framing — the prior
+         * plaintext-nested form was unparseable (outer validator saw the inner
+         * '*' as its checksum delimiter and the comma split mangled the inner).
+         */
         if (n < 3) return;
         const char *target = fields[1];
-        const char *inner_raw = fields[2];
-        size_t inner_len = strlen(inner_raw);
-        char inner_copy[MAX_LINE_LEN + 1];
-        if (inner_len + 1 > sizeof(inner_copy)) return;
-        memcpy(inner_copy, inner_raw, inner_len + 1);
-        if (!proto_validate_inner(inner_copy, inner_len)) return;
+        const char *hex_inner = fields[2];
+        uint8_t inner_bytes[MAX_LINE_LEN + 1];
+        size_t inner_len = proto_hex_decode(hex_inner, inner_bytes,
+                                            sizeof(inner_bytes) - 1);
+        if (inner_len == 0) return;
+        inner_bytes[inner_len] = '\0';
+        if (!proto_validate_inner((const char *)inner_bytes, inner_len)) return;
         int idx = leaf_idx_from_id(target);
         if (idx < 0) return;
         char with_nl[MAX_LINE_LEN + 2];
         if (inner_len + 2 > sizeof(with_nl)) return;
-        memcpy(with_nl, inner_copy, inner_len);
+        memcpy(with_nl, inner_bytes, inner_len);
         with_nl[inner_len]     = '\n';
         with_nl[inner_len + 1] = '\0';
         leaf_cmd_relay((uint8_t)idx, with_nl);

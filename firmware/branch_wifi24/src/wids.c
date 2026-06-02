@@ -27,12 +27,40 @@ bool wids_check_evil_twin(const wids_event_t *bc, evil_twin_alert_t *out) {
     bool found = dedup_lookup(bc->bssid, &known);
 
     if (found && known.ssid_len > 0 && bc->ssid_len > 0) {
-        if (known.ssid_len != bc->ssid_len ||
-            memcmp(known.ssid, bc->ssid, bc->ssid_len) != 0) {
+        bool ssid_changed = (known.ssid_len != bc->ssid_len ||
+                             memcmp(known.ssid, bc->ssid, bc->ssid_len) != 0);
+        bool enc_changed  = (known.enc != bc->enc);
+        /*
+         * v1.0 detector caveat: dedup is keyed by BSSID, so the only
+         * "evil-twin"-class signal we can produce here is "this same radio
+         * (same BSSID) changed its SSID or encryption advertisement". A real
+         * evil twin advertises someone *else's* SSID under a *different*
+         * BSSID — that path needs an SSID-keyed table and is deferred
+         * (branch_controller_wifi24_v1_1_amendment.md / wifi5 §8 open items).
+         *
+         * The alert is therefore about a *single* radio. known_bssid is left
+         * zeroed so the analyzer can tell "no second BSSID was identified"
+         * apart from the future case where we genuinely have two radios.
+         */
+        if (ssid_changed) {
             memset(out, 0, sizeof(*out));
             out->kind = ET_SSID_MISMATCH;
             memcpy(out->rogue_bssid, bc->bssid, 6);
-            memcpy(out->known_bssid, bc->bssid, 6);
+            /* known_bssid intentionally left zeroed (see comment above). */
+            memcpy(out->ssid, bc->ssid, bc->ssid_len);
+            out->ssid_len = bc->ssid_len;
+            out->rogue_enc = bc->enc;
+            out->known_enc = known.enc;
+            out->rogue_rssi = bc->rssi;
+            out->channel = bc->channel;
+            out->local_timer_us = bc->local_timer_us;
+            return true;
+        }
+        if (enc_changed) {
+            memset(out, 0, sizeof(*out));
+            out->kind = ET_ENC_MISMATCH;
+            memcpy(out->rogue_bssid, bc->bssid, 6);
+            /* known_bssid intentionally left zeroed (same single radio). */
             memcpy(out->ssid, bc->ssid, bc->ssid_len);
             out->ssid_len = bc->ssid_len;
             out->rogue_enc = bc->enc;

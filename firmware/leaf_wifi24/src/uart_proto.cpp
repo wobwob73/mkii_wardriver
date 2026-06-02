@@ -39,15 +39,48 @@ bool append_checksum(char *line, size_t cap) {
     return true;
 }
 
+static uint32_t g_tx_drop_count = 0;
+static const uint32_t TX_DEADLINE_MS = 50;
+
 bool send_line(const char *line) {
     if (!line) return false;
     size_t n = strlen(line);
     if (n == 0) return false;
-    while (Serial.availableForWrite() < (int)n) {
+
+    /*
+     * Chunked write: previously this spun until availableForWrite() >= n,
+     * which deadlocks if the hardware TX buffer is smaller than the
+     * longest framed line (MAX_LINE_LEN = 200) and the upstream link is
+     * backpressured. Now we write only as much as the buffer currently
+     * accepts and yield, with a hard 50 ms deadline. On timeout we drop
+     * the remainder of the frame and bump g_tx_drop_count for $HB.
+     */
+    uint32_t start_ms = millis();
+    size_t written = 0;
+    while (written < n) {
+        int avail = Serial.availableForWrite();
+        if (avail > 0) {
+            size_t chunk = (size_t)avail;
+            if (chunk > n - written) chunk = n - written;
+            size_t actually = Serial.write((const uint8_t *)(line + written), chunk);
+            written += actually;
+            if (actually == 0) {
+                /* Driver refused — yield and retry against the deadline. */
+                delay(0);
+            }
+            continue;
+        }
+        if ((millis() - start_ms) >= TX_DEADLINE_MS) {
+            g_tx_drop_count++;
+            return false;
+        }
         delay(0);
     }
-    Serial.write((const uint8_t *)line, n);
     return true;
+}
+
+uint32_t tx_drop_count() {
+    return g_tx_drop_count;
 }
 
 bool send_framed(const char *body) {
@@ -79,6 +112,12 @@ void LineReceiver::feed(uint8_t byte) {
 
     if (byte == '\n') {
         if (pos_ < MAX_LINE_LEN) {
+            /* Strip a trailing CR (CRLF terminators) before zero-terminating
+             * so the tightened checksum validator sees '*XX' as the final
+             * three bytes, not '*XX\r'. */
+            if (pos_ > 0 && buf_[pos_ - 1] == '\r') {
+                pos_--;
+            }
             buf_[pos_] = '\0';
             len_ = pos_;
             ready_ = true;
@@ -106,7 +145,9 @@ bool validate_checksum(const char *line, size_t len) {
         if (line[i] == '*') { star = line + i; break; }
     }
     if (!star) return false;
-    if ((size_t)((star + 3) - line) > len) return false;
+    /* Require '*XX' to be EXACTLY at the end of the line. Trailing garbage
+     * after a valid checksum is a framing error, not a tolerated suffix. */
+    if ((size_t)((star + 3) - line) != len) return false;
     int hi = hex_to_int(star[1]);
     int lo = hex_to_int(star[2]);
     if (hi < 0 || lo < 0) return false;

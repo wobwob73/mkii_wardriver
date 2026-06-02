@@ -462,7 +462,7 @@ add_executable(env_sensor_branch
 )
 
 target_compile_definitions(env_sensor_branch PRIVATE
-    SENSOR_FW_VERSION="1.0.0"
+    SENSOR_FW_VERSION="1.0.1"                # firmware build; bumped for PPS atomic-snapshot fix
 )
 
 target_include_directories(env_sensor_branch PRIVATE

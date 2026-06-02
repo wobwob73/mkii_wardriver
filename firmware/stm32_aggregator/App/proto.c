@@ -27,7 +27,9 @@ bool proto_validate_line(const char *line, size_t len) {
         if (line[i] == '*') { star = line + i; break; }
     }
     if (!star) return false;
-    if ((size_t)((star + 3) - line) > len) return false;
+    /* Require '*XX' to be EXACTLY at the end of the line. Trailing garbage
+     * after a valid checksum is a framing error, not a tolerated suffix. */
+    if ((size_t)((star + 3) - line) != len) return false;
     int hi = hex_to_int(star[1]);
     int lo = hex_to_int(star[2]);
     if (hi < 0 || lo < 0) return false;
@@ -100,6 +102,12 @@ void proto_lr_feed(line_receiver_t *lr, uint8_t b) {
 
     if (b == '\n') {
         if (lr->pos < MAX_LINE_LEN) {
+            /* Strip a trailing CR (CRLF terminators) before zero-terminating
+             * so the tightened checksum validator sees '*XX' as the final
+             * three bytes, not '*XX\r'. */
+            if (lr->pos > 0 && lr->buf[lr->pos - 1] == '\r') {
+                lr->pos--;
+            }
             lr->buf[lr->pos] = '\0';
             lr->len = lr->pos;
             lr->ready = true;
