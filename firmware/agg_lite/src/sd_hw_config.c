@@ -2,9 +2,10 @@
  * sd_hw_config.c — application hardware configuration for the vendored
  * no-OS-FatFS-SD-SPI-RPi-Pico library (AGG_SD_BACKEND=fatfs only).
  *
- * The library is hardware-agnostic: it calls back into spi_get_*/sd_get_* to
- * learn the bus + card wiring. That config is application-specific, so it lives
- * HERE (app code) rather than in the vendored tree, which stays unmodified.
+ * The library is hardware-agnostic: it calls back into the app's spi_get_ and
+ * sd_get_ getters to learn the bus + card wiring. That config is application-
+ * specific, so it lives HERE (app code) rather than in the vendored tree, which
+ * stays unmodified.
  *
  * SPI0 pin map per lite_aggregator_v1_0.md §1:
  *   SCK GP18, MOSI GP19, MISO GP16, CS GP17, card-detect GP22.
