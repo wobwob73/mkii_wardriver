@@ -35,8 +35,12 @@ static sd_card_t g_sd = {
     .pcName              = "0:",
     .spi                 = &g_spi,
     .ss_gpio             = SD_CS_PIN,  /* GP17 */
-    .use_card_detect     = true,
-    .card_detect_gpio    = SD_CD_PIN,  /* GP22, pull-up */
+    /* Card-detect defaults OFF (AGG_SD_CARD_DETECT=0): the bench adapter is a
+     * 6-pin SPI breakout with no CD line, so the driver assumes the card is
+     * present and gates on mount success, leaving GP22 free. The CD config
+     * below is honoured only when AGG_SD_CARD_DETECT=1. */
+    .use_card_detect     = (AGG_SD_CARD_DETECT != 0),
+    .card_detect_gpio    = SD_CD_PIN,  /* GP22, pull-up (used only if CD on) */
     .card_detected_true  = 0,          /* active-low socket: present pulls low */
 };
 

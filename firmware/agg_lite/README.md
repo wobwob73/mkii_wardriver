@@ -64,12 +64,21 @@ bucket renamed at first fix, open-once/write-many, batched drain of the 32 KB RA
 ring, `f_sync` per flush, `FR_DISK_ERR` re-mount on hot remove/insert — drives
 this backend, and `$LA.sd_ok` / `$LA.sd_kb` reflect the real card.
 
+**Card-detect (GP22) is OFF by default** (`AGG_SD_CARD_DETECT=0`). The bench
+microSD adapter is a 6-pin SPI breakout (CLK/MOSI/MISO/CS + power) with **no CD
+line**, so the driver assumes the card is present and gates on mount success,
+and GP22 is left free. If CD polled an unconnected, pull-up'd GP22 it would read
+"no card" and `fatfs` logging would silently no-op. Build with
+`-DAGG_SD_CARD_DETECT=1` only for a socket that actually exposes a card-detect
+pin (then `SD_CD_PIN`/GP22, active-low, in `sd_hw_config.c` applies).
+
 > **Status: compiled + linked, HARDWARE-VERIFICATION-PENDING.** CI builds and
 > links `agg_lite.uf2` with `-DAGG_SD_BACKEND=fatfs`, which proves it *builds and
 > links* — **not** that a card is actually written. That requires the bench step
 > in `lite_aggregator_v1_0.md` §13.3 (walk a dense environment, pull the card,
-> confirm `records.log` is well-formed and `f_sync`'d). The CD polarity and SPI
-> baud in `sd_hw_config.c` are preliminary pending that bring-up.
+> confirm `records.log` is well-formed and `f_sync`'d). The SPI baud in
+> `sd_hw_config.c` (and the CD polarity, if `AGG_SD_CARD_DETECT=1`) are
+> preliminary pending that bring-up.
 
 **`stub` — the default placeholder.** Brings up SPI0 + card-detect and accounts
 writes (byte counter) but does **not** persist them, so `agg_lite.uf2` builds in

@@ -59,7 +59,16 @@
 #define SD_MOSI_PIN               19
 #define SD_MISO_PIN               16
 #define SD_CS_PIN                 17
-#define SD_CD_PIN                 22   /* card-detect, optional, pull-up */
+#define SD_CD_PIN                 22   /* card-detect, optional (see AGG_SD_CARD_DETECT) */
+
+/* Card-detect is OFF by default: the bench microSD adapter is a 6-pin SPI
+ * breakout (CLK/MOSI/MISO/CS + power) with no CD line. When 0, the FatFs
+ * driver skips CD polling and relies on mount success, and GP22 is left free.
+ * Set to 1 for sockets that DO expose a card-detect pin (then SD_CD_PIN with
+ * the active-low polarity in sd_hw_config.c applies). */
+#ifndef AGG_SD_CARD_DETECT
+#define AGG_SD_CARD_DETECT        0
+#endif
 
 /* Status LED (Pico onboard) */
 #ifndef AGG_LED_PIN

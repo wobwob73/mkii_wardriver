@@ -27,7 +27,8 @@
   SD MOSI ←───────  │ GP19 (SPI0 TX)            │
   SD MISO ───────→  │ GP16 (SPI0 RX)            │
   SD CS ←─────────  │ GP17 (SPI0 CSn, GPIO)     │
-  SD CD ─────────→  │ GP22 (GPIO, card-detect)  │  optional, pull-up
+  SD CD ─────────→  │ GP22 (GPIO, card-detect)  │  optional; UNUSED with the CD-less
+                    │                          │  6-pin SPI adapter (AGG_SD_CARD_DETECT=0)
                     │                          │
   (live mirror)     │ USB   (native, CDC)       │  optional, see §2
   (debug) ←───────  │ GP12 (UART0 TX)           │  optional, 115200 8N1
