@@ -1,0 +1,55 @@
+name: leaf_wifi5
+
+on:
+  push:
+    branches: [main, claude/**]
+    paths:
+      - 'firmware/leaf_wifi5/**'
+      - '.github/workflows/leaf_wifi5.yml'
+  pull_request:
+    paths:
+      - 'firmware/leaf_wifi5/**'
+      - '.github/workflows/leaf_wifi5.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: leaf_wifi5-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: pio-leaf-wifi5-${{ runner.os }}-${{ hashFiles('firmware/leaf_wifi5/platformio.ini') }}
+          restore-keys: |
+            pio-leaf-wifi5-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build leaf_wifi5
+        working-directory: firmware/leaf_wifi5
+        run: pio run -e leaf_wifi5
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: leaf_wifi5-firmware
+          path: |
+            firmware/leaf_wifi5/.pio/build/leaf_wifi5/firmware.bin
+            firmware/leaf_wifi5/.pio/build/leaf_wifi5/firmware.elf
+          if-no-files-found: warn

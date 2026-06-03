@@ -1,0 +1,79 @@
+name: agg_lite
+
+on:
+  push:
+    branches: [main, claude/**]
+    paths:
+      - 'firmware/agg_lite/**'
+      - '.github/workflows/agg_lite.yml'
+  pull_request:
+    paths:
+      - 'firmware/agg_lite/**'
+      - '.github/workflows/agg_lite.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: agg_lite-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PICO_SDK_TAG: '2.1.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both SD backends must build+link: the default placeholder (stub) and
+        # the real vendored FatFs-over-SPI backend (fatfs).
+        backend: [stub, fatfs]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib \
+            build-essential \
+            python3 \
+            git \
+            ninja-build
+
+      - name: Cache pico-sdk
+        id: cache-pico-sdk
+        uses: actions/cache@v4
+        with:
+          path: pico-sdk
+          key: pico-sdk-${{ env.PICO_SDK_TAG }}
+
+      - name: Fetch pico-sdk
+        if: steps.cache-pico-sdk.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth=1 --branch ${{ env.PICO_SDK_TAG }} https://github.com/raspberrypi/pico-sdk.git
+          cd pico-sdk && git submodule update --init --depth=1
+
+      - name: Configure and build agg_lite (SD backend = ${{ matrix.backend }})
+        env:
+          PICO_SDK_PATH: ${{ github.workspace }}/pico-sdk
+        run: |
+          cd repo/firmware/agg_lite
+          mkdir -p build-${{ matrix.backend }}
+          cd build-${{ matrix.backend }}
+          cmake -G Ninja -DPICO_BOARD=pico -DAGG_SD_BACKEND=${{ matrix.backend }} ..
+          ninja agg_lite
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agg_lite-firmware-${{ matrix.backend }}
+          path: |
+            repo/firmware/agg_lite/build-${{ matrix.backend }}/agg_lite.uf2
+            repo/firmware/agg_lite/build-${{ matrix.backend }}/agg_lite.elf
+          if-no-files-found: warn
